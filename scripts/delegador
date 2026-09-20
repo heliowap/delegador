@@ -1,10 +1,10 @@
 #!/bin/sh
-# Builda o companion quando o binario falta ou esta mais velho que o fonte,
+# Builda o delegador quando o binario falta ou esta mais velho que o fonte,
 # depois executa. Mantem "clonou, funcionou" enquanto houver Go instalado.
 set -eu
 
 root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-bin="$root/bin/devin-companion"
+bin="$root/bin/delegador"
 
 needs_build=0
 [ -x "$bin" ] || needs_build=1
@@ -15,12 +15,12 @@ fi
 
 if [ "$needs_build" -eq 1 ]; then
     if ! command -v go >/dev/null 2>&1; then
-        echo "devin-plugin-cc: Go nao encontrado no PATH e o binario nao esta compilado." >&2
-        echo "Instale Go 1.27+ e rode /devin:setup." >&2
+        echo "delegador: Go nao encontrado no PATH e o binario nao esta compilado." >&2
+        echo "Instale Go 1.27+ e rode delegador doctor para o diagnostico." >&2
         exit 127
     fi
     mkdir -p "$root/bin"
-    ( cd "$root" && go build -o "$bin" ./cmd/devin-companion ) >&2
+    ( cd "$root" && go build -o "$bin" ./cmd/delegador ) >&2
 fi
 
 exec "$bin" "$@"

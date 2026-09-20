@@ -1,7 +1,9 @@
-# devin-plugin-cc
+# delegador
 
-Usar o `devin` como subagente do Claude Code (e do Codex), com Jev como classificador barato em cinco pontos do processo.
+Delega uma tarefa de código a um modelo escolhido pela tarefa, num laço
+próprio com permissão em código, verificação em código e escalada por falha
+provada. Sucesso do `devin-plugin-cc` (v1), que embrulhava o `devin` CLI.
 
-Design: [docs/superpowers/specs/2026-09-20-devin-plugin-cc-design.md](docs/superpowers/specs/2026-09-20-devin-plugin-cc-design.md)
-
-Status: spec aprovada para planejamento. Implementação ainda não iniciada.
+Uso e regras do repositório: [AGENTS.md](AGENTS.md).
+Design v2: `docs/superpowers/specs/2026-09-20-delegador-v2-design.md` no
+repositório `delegador`.

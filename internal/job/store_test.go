@@ -12,7 +12,7 @@ func TestRootHonorsXDGStateHome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "/tmp/xdg-teste/devin-plugin-cc/jobs" {
+	if got != "/tmp/xdg-teste/delegador/jobs" {
 		t.Errorf("Root() = %q", got)
 	}
 }

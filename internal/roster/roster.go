@@ -173,6 +173,16 @@ func parse(raw []byte) ([]Model, error) {
 				atual.Sondado.ToolCall = ehTrue(valor)
 			case "reasoning_content":
 				atual.Sondado.ReasoningContent = ehTrue(valor)
+			case "em":
+				// Data da sondagem DESTE modelo, gravada pelo `roster
+				// --probe`/`doctor --probe`. Prevalece sobre o
+				// as_of_sondagem do arquivo: uma re-sondagem parcial nao
+				// pode empurrar a data dos modelos nao re-sondados.
+				d, err := time.Parse("2006-01-02", unquote(valor))
+				if err != nil {
+					return nil, errf("em: %v", err)
+				}
+				atual.Sondado.Em = d
 			case "tokens_base":
 				n, err := strconv.Atoi(valor)
 				if err != nil {
@@ -228,9 +238,13 @@ func parse(raw []byte) ([]Model, error) {
 		}
 	}
 
-	// A data da sondagem é do arquivo inteiro, não de cada modelo.
+	// A data da sondagem é do arquivo inteiro, mas só onde o modelo não
+	// declarou a sua própria (`em`): o as_of_sondagem vale como a data da
+	// sondagem original em bloco.
 	for i := range ms {
-		ms[i].Sondado.Em = asOfSondagem
+		if ms[i].Sondado.Em.IsZero() {
+			ms[i].Sondado.Em = asOfSondagem
+		}
 	}
 	return ms, nil
 }

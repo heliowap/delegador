@@ -1,0 +1,11 @@
+{
+  "name": "heliowap-delegador",
+  "owner": { "name": "Helio Pinheiro" },
+  "plugins": [
+    {
+      "name": "delegador",
+      "source": "./",
+      "description": "Delegacao com permissao em codigo, verificacao em codigo e cascata por falha provada."
+    }
+  ]
+}

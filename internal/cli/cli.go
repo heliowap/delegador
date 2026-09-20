@@ -16,7 +16,10 @@ func handlers() map[string]handler {
 	return map[string]handler{
 		"doctor": runDoctor,
 		"plan":   runPlan,
+		"result": runResult,
+		"roster": runRoster,
 		"run":    runRun,
+		"status": runStatus,
 	}
 }
 
@@ -37,12 +40,12 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 func usage(w io.Writer, hs map[string]handler, unknown string) {
 	if unknown != "" {
-		fmt.Fprintf(w, "devin-companion: subcomando desconhecido %q\n\n", unknown)
+		fmt.Fprintf(w, "delegador: subcomando desconhecido %q\n\n", unknown)
 	}
 	names := make([]string, 0, len(hs))
 	for n := range hs {
 		names = append(names, n)
 	}
 	sort.Strings(names)
-	fmt.Fprintf(w, "uso: devin-companion <subcomando> [flags]\n\nsubcomandos: %v\n", names)
+	fmt.Fprintf(w, "uso: delegador <subcomando> [flags]\n\nsubcomandos: %v\n", names)
 }

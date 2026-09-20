@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, v2/base]
+  push:
+    branches: [main, v2/base]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27'
+      - name: Sem dependencias externas
+        run: |
+          if grep -q '^require' go.mod; then
+            echo "go.mod ganhou dependencia externa; o delegador e stdlib pura" >&2
+            exit 1
+          fi
+      - run: go vet ./...
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+      - run: go test ./...

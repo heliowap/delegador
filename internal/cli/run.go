@@ -414,6 +414,10 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			ResumeCommand: "delegador run --job " + j.ID,
 			At:            time.Now(),
 		}
+	} else {
+		// Retomada que terminou sem veto apaga o bloco CANCELADO anterior —
+		// um motivo velho num job que completou leria como veto fresco.
+		j.CancelReason = nil
 	}
 	if concluido {
 		j.State = job.StateCompleted
