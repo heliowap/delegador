@@ -43,6 +43,9 @@ func DefaultConfig() Config {
 // tarefa já sofreu. A ordem das checagens mantém o Motivo fiel à causa
 // real: veto e parada sem entrega relatam a própria causa mesmo quando o
 // teto de escaladas também estaria atingido.
+//
+// O chamador deve passar um Report de um verify.Run que retornou sem
+// erro — uma verificação que falhou por infra não chega aqui.
 func Avaliar(out agent.Outcome, rep verify.Report, tentativa int, cfg Config) Decisao {
 	// Veto é o watchdog cortando o laço: nada foi entregue para verificar
 	// e o sinal (recusa de permissão, teto de custo) é falha de ambiente,
@@ -75,6 +78,15 @@ func Avaliar(out agent.Outcome, rep verify.Report, tentativa int, cfg Config) De
 		return Decisao{Escala: true, NovoPercentil: cfg.DegrauPercentil,
 			Motivo: "verificacao vermelha"}
 	case !rep.MutationProved:
+		// Duas causas distintas: a sonda não rodou (sem TestCmd ou erro de
+		// infra — inclui o passo ausente num Report montado à mão) ou rodou
+		// e o teste ficou verde com a correção desfeita. Ambas escalam —
+		// entrega sem prova não completa em silêncio e o teto de uma
+		// escalada limita o custo — mas o Motivo nomeia a causa real.
+		if s, ok := rep.Step("mutacao"); !ok || s.Skipped {
+			return Decisao{Escala: true, NovoPercentil: cfg.DegrauPercentil,
+				Motivo: "sonda de mutacao nao rodou; entrega sem prova"}
+		}
 		return Decisao{Escala: true, NovoPercentil: cfg.DegrauPercentil,
 			Motivo: "mutacao nao provou nada"}
 	}

@@ -1,6 +1,7 @@
 package cascade
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/heliowap/delegador/internal/agent"
@@ -69,5 +70,22 @@ func TestEscalaQuandoMutacaoNaoProvaNada(t *testing.T) {
 	rep := verify.Report{Steps: []verify.Step{{Name: "teste", ExitCode: 0}}, MutationProved: false}
 	if d := Avaliar(agent.Outcome{Stop: "final"}, rep, 0, DefaultConfig()); !d.Escala {
 		t.Error("mutacao que nao prova nada deveria escalar")
+	}
+}
+
+// Sonda pulada (sem TestCmd ou erro de infra) tambem escala, mas o Motivo
+// precisa nomear a causa real: nao e mutacao improdutiva, e entrega sem
+// prova porque a sonda nao rodou.
+func TestEscalaQuandoSondaNaoRodou(t *testing.T) {
+	rep := verify.Report{Steps: []verify.Step{
+		{Name: "teste", ExitCode: 0},
+		{Name: "mutacao", Skipped: true},
+	}, MutationProved: false}
+	d := Avaliar(agent.Outcome{Stop: "final"}, rep, 0, DefaultConfig())
+	if !d.Escala {
+		t.Fatal("entrega sem prova deveria escalar")
+	}
+	if !strings.Contains(d.Motivo, "nao rodou") {
+		t.Errorf("Motivo %q deveria nomear a sonda que nao rodou", d.Motivo)
 	}
 }
