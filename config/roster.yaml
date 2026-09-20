@@ -1,0 +1,175 @@
+# Roster de delegação — modelos habilitados para receber tarefa.
+#
+# Este arquivo é curadoria humana, não descoberta automática. O sistema só
+# delega para o que está aqui. Nada entra por estar disponível no proxy.
+#
+# Três origens de dado, e elas não se misturam:
+#
+#   sondado:   medido por mim contra o proxy local em 2026-09-20. Perde
+#              validade sem aviso — `doctor --probe` remede.
+#   benchmark: OpenRouter /api/v1/benchmarks, as_of 2026-09-20T00:03Z.
+#              Fonte externa, sobre uma configuração que pode não ser a sua.
+#   humano:    você preenche. O sistema nunca escreve aqui.
+#
+# `custo_usd_por_mtok` é o SEU custo de servir, não o preço do OpenRouter.
+# Está como `null` de propósito: o roteador trata null como "não elegível
+# para decisão por custo" em vez de adivinhar zero.
+
+versao: 1
+as_of_benchmark: "2026-09-20T00:03:27Z"
+as_of_sondagem: "2026-09-20"
+
+modelos:
+
+  - id: cpa-fw-glm-5.3-flash
+    papel: barato
+    permaslug: z-ai/glm-5.3-flash-20260826
+    mapeamento: exato
+    sondado:
+      tool_call: true
+      reasoning_content: true
+      tokens_base: 162
+      latencia_s: 3.0
+    benchmark:
+      coding_index: 71.5
+      intelligence_index: 41.8
+      agentic_index: 50.9
+      tau_bench: 0.758
+      tau_bench_desvio: 0.017
+      custo_por_tarefa_usd: 0.0061
+      gpqa_diamond: 0.861
+      preco_openrouter_usd_por_mtok: {entrada: 0.15, saida: 0.50}
+    humano:
+      custo_usd_por_mtok: null
+      habilitado: true
+    nota: >
+      Primeira escolha da cascata. Menor piso de tokens do roster (162, contra
+      516-552 dos que passam por backend com prompt injetado) e custo por
+      tarefa 81x menor que o opus-5 para 4,5 pontos a menos de tau-bench.
+      Emite reasoning_content, o que o watchdog aproveita.
+
+  - id: cpa-or-deepseek-v4.1-flash
+    papel: barato
+    permaslug: deepseek/deepseek-v4-flash-20260731
+    mapeamento: aproximado   # sondei v4.1-flash; o benchmark só tem v4-flash
+    sondado:
+      tool_call: true
+      reasoning_content: false
+      tokens_base: 298
+      latencia_s: 6.5
+    benchmark:
+      coding_index: 69.1
+      intelligence_index: 34.3
+      agentic_index: 41.0
+      tau_bench: 0.730
+      tau_bench_desvio: 0.054
+      custo_por_tarefa_usd: 0.0075
+      gpqa_diamond: 0.855
+      preco_openrouter_usd_por_mtok: {entrada: 0.11, saida: 0.33}
+    humano:
+      custo_usd_por_mtok: null
+      habilitado: true
+    nota: >
+      Segunda opção barata. Números do benchmark são da geração anterior
+      (v4-flash), então tratar como estimativa, não medida. O desvio do
+      tau-bench é 0.054 — o maior do roster, e sozinho cobre a diferença
+      para o glm. Foi também o mais lento na sondagem, 6.5s.
+
+  - id: devin/gemini-3-6-flash
+    papel: barato
+    permaslug: google/gemini-3.6-flash-20260721
+    mapeamento: exato
+    sondado:
+      tool_call: true
+      reasoning_content: false
+      tokens_base: 416
+      latencia_s: 1.4
+    benchmark:
+      coding_index: 69.2
+      intelligence_index: 34.0
+      agentic_index: 29.0
+      tau_bench: 0.730
+      tau_bench_desvio: 0.003
+      custo_por_tarefa_usd: 0.2365
+      gpqa_diamond: 0.928
+      preco_openrouter_usd_por_mtok: {entrada: 1.35, saida: 6.75}
+    humano:
+      custo_usd_por_mtok: null
+      habilitado: true
+    nota: >
+      O mais rápido do roster (1.4s) e o melhor gpqa (0.928), mas o pior
+      agentic_index (29.0) e custo por tarefa 39x o do glm. Serve para
+      julgamento pontual e resposta curta, não para tarefa de horizonte longo.
+
+  - id: claude-fable-5-1
+    papel: forte
+    permaslug: anthropic/claude-fable-5.1-20260831
+    mapeamento: exato
+    sondado:
+      tool_call: true
+      reasoning_content: false
+      tokens_base: 518
+      latencia_s: 1.9
+    benchmark:
+      coding_index: 81.6      # maior do benchmark inteiro
+      intelligence_index: 53.4
+      agentic_index: 57.9
+      tau_bench: 0.783
+      tau_bench_desvio: 0.003
+      custo_por_tarefa_usd: 0.7261
+      gpqa_diamond: 0.901
+      preco_openrouter_usd_por_mtok: {entrada: 5.00, saida: 25.00}
+    humano:
+      custo_usd_por_mtok: null
+      habilitado: true
+    nota: >
+      Topo de coding_index entre os 149 modelos medidos. Destino de escalada
+      quando a verificação em código reprovar o barato. Custo por tarefa é o
+      maior do roster — só entra por falha provada, nunca por precaução.
+
+  - id: cpa-claude-opus-5(low)
+    papel: forte
+    permaslug: anthropic/claude-opus-5-20260723
+    mapeamento: aproximado   # sondei o esforço (low); o benchmark não diz qual usou
+    sondado:
+      tool_call: true
+      reasoning_content: false
+      tokens_base: 516
+      latencia_s: 2.0
+    benchmark:
+      coding_index: 78.0
+      intelligence_index: 50.8
+      agentic_index: 56.5
+      tau_bench: 0.792      # melhor tau-bench do roster
+      tau_bench_desvio: 0.022
+      custo_por_tarefa_usd: 0.4930
+      gpqa_diamond: 0.872
+      preco_openrouter_usd_por_mtok: {entrada: 5.50, saida: 27.50}
+    humano:
+      custo_usd_por_mtok: null
+      habilitado: true
+    nota: >
+      Melhor tau-bench do roster, mas a diferença para o glm (0.792 vs 0.758)
+      é de 1,9 desvios e custa 81x mais por tarefa. Note que sondei o esforço
+      `low` e o benchmark não declara qual configuração mediu: os números
+      valem como teto, não como o que você vai obter.
+
+  - id: devin/swe-2
+    papel: forte
+    permaslug: null
+    mapeamento: ausente
+    sondado:
+      tool_call: true
+      reasoning_content: true
+      tokens_base: 552      # maior do roster: prompt injetado pelo backend
+      latencia_s: 4.7
+    benchmark: null
+    humano:
+      custo_usd_por_mtok: null
+      habilitado: true
+    nota: >
+      NÃO MEDIDO pelo OpenRouter — nenhum permaslug com "swe" existe nas 256
+      entradas. Elegível apenas por viabilidade e custo, nunca por índice, e
+      o relatório precisa dizer isso quando ele for escolhido. Ausência de
+      nota não é nota baixa. Emite reasoning_content. Foi o executor das 8
+      tarefas implementadas neste repo em 2026-09-20.
