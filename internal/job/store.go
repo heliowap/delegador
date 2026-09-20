@@ -37,17 +37,23 @@ type CancelReason struct {
 
 // Job e o estado persistido de uma delegacao.
 type Job struct {
-	ID           string        `json:"id"`
-	State        State         `json:"state"`
-	Worktree     string        `json:"worktree"`
-	Branch       string        `json:"branch"`
-	Model        string        `json:"model"`
-	Permission   string        `json:"permission"`
-	PID          int           `json:"pid"`
-	PGID         int           `json:"pgid"`
-	CreatedAt    time.Time     `json:"created_at"`
-	UpdatedAt    time.Time     `json:"updated_at"`
-	CancelReason *CancelReason `json:"cancel_reason,omitempty"`
+	ID         string `json:"id"`
+	State      State  `json:"state"`
+	Worktree   string `json:"worktree"`
+	Branch     string `json:"branch"`
+	Model      string `json:"model"`
+	Permission string `json:"permission"`
+
+	// O que o run precisa para remontar o tools.Policy do job: a escrita vai
+	// para os prefixos declarados e a allowlist de comando vem dos comandos
+	// do briefing. Worktree ja esta no campo acima.
+	WritePrefixes []string      `json:"write_prefixes"`
+	AllowCommands []string      `json:"allow_commands"`
+	PID           int           `json:"pid"`
+	PGID          int           `json:"pgid"`
+	CreatedAt     time.Time     `json:"created_at"`
+	UpdatedAt     time.Time     `json:"updated_at"`
+	CancelReason  *CancelReason `json:"cancel_reason,omitempty"`
 
 	dir string
 }

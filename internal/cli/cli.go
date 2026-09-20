@@ -15,6 +15,7 @@ type handler func(ctx context.Context, args []string, stdout, stderr io.Writer) 
 func handlers() map[string]handler {
 	return map[string]handler{
 		"doctor": runDoctor,
+		"plan":   runPlan,
 	}
 }
 
