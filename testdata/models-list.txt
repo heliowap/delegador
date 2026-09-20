@@ -1,0 +1,20 @@
+Available models (48 families)
+
+Claude Opus 5 (claude-opus-5)
+  aliases: opus
+  claude-opus-5-medium                    Claude Opus 5 Medium  [1M context, $5 / 1M Input · $0.5 / 1M Cached input · $25 / 1M Output]
+  claude-opus-5-max                       Claude Opus 5 Max  [1M context, $5 / 1M Input · $0.5 / 1M Cached input · $25 / 1M Output]
+
+SWE-2 (swe-2)
+  aliases: swe
+  swe-2-medium                            SWE-2 Medium  [262K context, Free]
+  swe-2-high                              SWE-2 High  [262K context, Free]
+  swe-2-max                               SWE-2 Max  [262K context, Free]
+
+GPT-5.6 Luna (gpt-5.6-luna)
+  gpt-5-6-luna-medium                     GPT-5.6 Luna Medium Thinking  [1M context, $0.2 / 1M Input · $0.02 / 1M Cached input · $1.2 / 1M Output]
+
+Quantum Flux 9 (quantum-flux-9)
+  qf9-warp                                Quantum Flux 9 Warp  [formato que ainda nao existe]
+
+Pass a family slug, alias, or model UID to `--model` (e.g. `--model opus`)
