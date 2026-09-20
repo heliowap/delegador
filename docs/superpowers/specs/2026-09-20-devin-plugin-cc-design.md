@@ -1,7 +1,13 @@
 # devin-plugin-cc — design
 
 Data: 2026-09-20
-Status: aprovado para planejamento
+Status: **SUPERSEDIDO** por [delegador v2](2026-09-20-delegador-v2-design.md)
+
+> Este documento embrulhava o `devin` CLI e o observava de fora. Medição em
+> 2026-09-20 mostrou que os três pilares disso não se sustentam: a permissão do
+> CLI é não determinística, o `--export` só é escrito no encerramento, e o
+> executor gratuito é promocional. Mantido para histórico; o §6 (perguntas Jev)
+> e o §5.4 (verificação) seguem válidos e foram herdados pelo v2.
 Autor: Helio Pinheiro (design conduzido com Claude Opus 5)
 
 ## 1. Problema

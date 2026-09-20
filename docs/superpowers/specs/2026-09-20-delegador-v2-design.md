@@ -1,0 +1,287 @@
+# Delegador — design v2
+
+Data: 2026-09-20 · Status: para revisão
+Supersede: [v1](2026-09-20-devin-plugin-cc-design.md), que embrulhava o `devin` CLI.
+
+## 1. O que mudou, e por que
+
+O v1 desenhou um companion que **embrulha um agente de CLI e o observa de
+fora**. Oito tarefas implementadas e quatro falhas medidas depois, esse
+desenho se mostrou errado em três pontos, todos pela mesma causa: estar do
+lado de fora do laço.
+
+**A permissão não é decidível de fora.** O `--permission-mode smart` do
+`devin` é um modelo rápido julgando segurança, e ele julga **diferente diante
+da mesma entrada**: recusou `chmod`, recusou `git commit`, e recusou uma vez
+o mesmo `go test` que aprovara dezenas de vezes. Quatro recusas em nove
+tarefas. Contra não-determinismo não existe contorno — só existe ser quem
+decide. `dangerous`, a única alternativa oferecida, aprovaria `push`.
+
+**A observação de fora é arqueologia.** O v1 mandava fazer poll do
+`export.json` "a cada turno", seguindo a documentação. Medição: `--export` só
+é escrito no encerramento; o stdout é que cresce. A documentação do fornecedor
+e o protocolo de referência afirmavam coisas opostas, e **os dois estavam
+trocados**. Um watchdog que depende de adivinhar o formato de saída de outro
+programa está sempre a uma versão de ficar cego.
+
+**Um executor só é barato até a promoção acabar.** O `swe-2` está gratuito
+por promoção de setembro/2026. Amarrar o desenho a um executor específico é
+herdar o preço dele.
+
+O acesso direto à API resolve os três de uma vez, e está medido: o proxy local
+em `http://127.0.0.1:8317/v1` expõe 238 modelos em formato OpenAI, e **os seis
+do roster fazem tool call**. Quando nós somos o laço, a permissão é uma lista
+em código, os turnos estão em memória, e o executor é um parâmetro.
+
+## 2. Objetivo
+
+Delegar uma tarefa de código a um modelo escolhido pela tarefa, executá-la num
+laço que nós controlamos, verificar o resultado com código, e escalar para um
+modelo mais forte só quando a verificação reprovar — com Jev nos pontos de
+julgamento semântico e código em todo o resto.
+
+### Não-objetivos
+
+- **Não** reconstruir um IDE agêntico. O conjunto de ferramentas é o mínimo
+  que fecha o ciclo: ler, escrever, editar, executar comando, listar, buscar.
+- **Não** suportar "todos os modelos". Suportado é o que está no roster e
+  passou na sondagem de viabilidade. Suporte é medição, não alegação.
+- **Não** substituir a verificação humana. O plugin roda teste, mutação, suíte
+  e lint e mostra a saída; aceitar continua sendo decisão de quem lê.
+- **Não** compactar a sessão do orquestrador. Escopo de outro projeto.
+
+## 3. Decisões
+
+| Decisão | Escolha | Razão |
+| --- | --- | --- |
+| Executor | Laço próprio contra `/v1/chat/completions` | Permissão determinística, turnos em memória, executor parametrizável |
+| Permissão | Allowlist em código, por padrão de comando | O único modo de não herdar o não-determinismo de um juiz externo |
+| Escolha de modelo | Jev diz a **dimensão**, código faz a aritmética | Comparar número é código; ler tarefa é julgamento |
+| Qualidade | Cascata: barato primeiro, escala por falha **provada** | `glm-5.3-flash` faz 0.758 no tau-bench a $0,0061/tarefa; `opus-5` faz 0.792 a $0,493 |
+| Roster | Curadoria humana, viabilidade medida | Disponível ≠ utilizável ≠ pago por você |
+| Origem de dado | `sondado`, `benchmark`, `fornecedor`, `humano`, nunca misturados | O fornecedor do `swe-2` publica 0.928 no TB2.1 e 0.273 no TB4 |
+| Linguagem | Go 1.27+, stdlib pura | Mantido do v1, validado em 8 tarefas |
+
+## 4. Arquitetura
+
+```
+cmd/delegador/main.go
+internal/
+  cli/        plan route run verify result roster doctor probe
+  agent/      laço: turnos, tool calls, parada          ← o coração
+  tools/      read write edit exec ls grep + allowlist  ← a permissão
+  route/      dimensão → índice → roster → modelo
+  roster/     leitura, sondagem de viabilidade, cache de benchmark
+  jev/        client questions window budget            ← reaproveitado do v1
+  job/        estado em disco, lockfile                 ← reaproveitado do v1
+  verify/     teste, mutação, suíte, lint
+  cascade/    política de escalada
+  gate/       delegabilidade e briefing
+  render/     saída de terminal
+```
+
+O laço é curto e é o único lugar com estado de conversa:
+
+```
+monta o contexto → chama o modelo → recebe tool_calls
+  → tools.Allow() decide, em código, o que executa
+  → executa e devolve o resultado → repete
+  → para por: resposta final, teto de turnos, ou veto do watchdog
+```
+
+## 5. Permissão — a correção central
+
+`tools.Allow(call) (bool, motivo)`, avaliada **antes** de qualquer execução,
+com três camadas e sem modelo em nenhuma:
+
+1. **Escopo de caminho.** Escrita só dentro da worktree do job, e só nos
+   prefixos declarados no briefing. Resolve symlink antes de comparar.
+2. **Allowlist de comando**, por padrão e não por string: `go test`, `go
+   build`, `go vet`, `pytest`, `npm test`, `chmod +x` dentro de `scripts/`.
+   Configurável por repo.
+3. **Negação dura, não sobreponível por configuração:** `git push`, `git
+   commit`, `git reset --hard`, `rm -rf`, `curl`, `wget`, `ssh`, qualquer
+   coisa com credencial no argumento.
+
+Recusa não mata o laço: volta ao modelo como resultado de ferramenta dizendo o
+que foi negado e por quê. Ele tenta outro caminho, em vez de morrer no meio —
+que é exatamente o que acontecia antes.
+
+**Commit continua sendo do companion**, depois do portão verde, nunca do
+modelo. Isso já era regra do v1 por desenho e virou obrigatório por medição.
+
+## 6. Fluxo
+
+### 6.1 `plan` — gates antes de qualquer token caro
+
+Inalterado do v1 e já implementado: o orquestrador entrega o defeito em uma
+frase mais evidência verbatim em JSONL; Jev seleciona a evidência item a item;
+o código monta o `briefing.md` a partir de template fixo; Jev roda o gate de
+delegabilidade e o gate de briefing sobre o artefato montado. Exit 3 reprova
+com o nome do item que faltou.
+
+### 6.2 `route` — qual modelo, decidido pela tarefa
+
+Jev responde **duas perguntas** sobre o briefing, numa requisição:
+
+- Choice `dimensao_dominante`: `mecanica` | `raciocinio` | `agentica`.
+  As três opções existem porque as três têm coluna de benchmark. Dimensão sem
+  medida correspondente seria resposta bonita e inútil.
+- Score `complexidade` (já existe no v1): define o **percentil de corte**
+  dentro do roster, não o modelo.
+
+O código faz o resto, e é aritmética: mapeia dimensão para o índice
+(`mecanica`→`coding_index`, `raciocinio`→`intelligence_index`,
+`agentica`→`tau_bench`), aplica o corte, filtra por viabilidade sondada e por
+`custo_usd_por_mtok` preenchido, e entre os que sobram escolhe o de menor
+`custo_por_tarefa_usd` — não o de menor preço por token, porque verbosidade é
+custo.
+
+Índices não são comparáveis entre si: `coding_index` vai a 81.6 com mediana
+43.4; `agentic_index` vai a 57.9 com mediana 15.8. O corte é **percentil
+dentro do roster**, nunca valor absoluto cruzando dimensões.
+
+Modelo sem nota de terceiro entra elegível por viabilidade e custo, marcado
+como não medido no relatório. Ausência de nota não é nota baixa.
+
+### 6.3 `run` — o laço
+
+Executa até resposta final, teto de turnos, ou veto. A cada turno, antes da
+próxima chamada, uma **pré-condição** avalia:
+
+Código: a mesma chamada de ferramenta repetida com o mesmo resultado; escrita
+fora do escopo; nenhuma escrita há N turnos; teto de custo do job atingido.
+
+Jev, e só quando houver janela que justifique: noul `sem_progresso` sobre o
+turno estruturado. Quando o modelo emitir `reasoning_content` — medido: dois
+dos seis do roster emitem — o julgamento é sobre o raciocínio; quando não,
+sobre a sequência de chamadas e resultados. **O watchdog deixa de ser vigia e
+vira pré-condição**: ele não observa de fora, ele decide se há próximo turno.
+
+Ao vetar, grava motivo com o trecho verbatim do turno e o comando de retomada.
+
+### 6.4 `verify` — código, sem modelo
+
+Inalterado do v1: `git diff`, o comando de teste, o **teste de mutação**
+(`git apply -R` dos hunks de não-teste numa cópia descartável, exigindo
+vermelho), a suíte do pacote, o lint. São fatos.
+
+### 6.5 Cascata — onde a qualidade é comprada
+
+Verificação verde: pronto. Verificação vermelha: **escala**, e a escolha do
+próximo é a mesma rota com o corte elevado um degrau, com o diff e a saída da
+falha entrando no contexto do modelo mais forte como evidência verbatim.
+
+Regras: no máximo uma escalada por tarefa, por padrão; se o forte também
+reprovar, para e entrega o caso ao humano com os dois diffs; se o barato
+reprovou por recusa de permissão ou por teto de custo, **não escala** — o
+modelo não falhou, o ambiente falhou, e escalar aqui é pagar caro por um erro
+que não é do executor.
+
+### 6.6 `result`
+
+Bloco de veredito com os números de `verify.json`, flag de divergência quando
+o relatório afirma verde e o exit code discorda, trace compactado por deleção
+(Jev, dois nouls por interação, nunca reescrever), e a linha de custo: modelo
+usado, houve escalada, dólar gasto separado entre executor e Jev.
+
+## 7. Roster e viabilidade
+
+[`config/roster.yaml`](../../config/roster.yaml) é curadoria humana. O sistema
+lê, sonda e usa; nunca acrescenta.
+
+`doctor --probe <id>` mede, por modelo, o que muda sem aviso: tool call,
+`reasoning_content`, piso de tokens de entrada, latência. Registra com data.
+Sondagem com mais de N dias vira aviso; modelo que deixou de fazer tool call
+sai da rota automaticamente e o relatório diz por quê.
+
+O cache de benchmark do OpenRouter respeita a cota (30/min, 500/dia) com TTL
+semanal. O casamento id→permaslug é **declarado no roster**, nunca inferido:
+os ids do proxy não são permaslugs, e adivinhar é como um modelo sem nota vira
+um modelo com a nota de outro.
+
+## 8. Jev — as perguntas
+
+Mantidas do v1: delegabilidade (§6.1), briefing (§6.2), evidência,
+compactação, coerência do relatório, triagem de achados. Já implementadas e
+verdes em `internal/jev/questions.go`.
+
+Alteradas ou novas:
+
+- **`dimensao_dominante`** (Choice, nova): as três dimensões com benchmark.
+- **`complexidade`** (Score, existente): passa a definir percentil de corte.
+- **`tarefa_autocontida`** (Noul, nova): o briefing determina o que fazer a
+  ponto de executar ser transcrever, ou exige decidir no caminho? Nasce de uma
+  medição: 16 das 18 tarefas do plano v1 são 72-91% código literal, e o
+  `swe-2` executou oito delas com fidelidade e morreu na primeira que exigia
+  montagem. Tarefa autocontida grande cabe num modelo barato; tarefa pequena
+  que exige decisão, não.
+- **`bloqueio_de_permissao`**: removida. Com a allowlist em código, não existe
+  mais o estado que ela detectava.
+
+## 9. Orçamento
+
+`jev.jsonl` para o Jev e `executor.jsonl` para o executor, separados, porque
+são ordens de grandeza diferentes: Jev cobra $0,042 por milhão de entrada com
+saída grátis; executor cobra entrada e saída. `status` e `result` mostram os
+dois. Teto por job em configuração; atingi-lo é veto, não escalada.
+
+Um piso a contabilizar: backends injetam system prompt a montante, medido
+entre 162 e 552 tokens de entrada por chamada conforme o modelo. O ledger conta
+o que a API **reporta**, nunca o que enviamos.
+
+## 10. Segurança
+
+Herda o v1, mais o que o laço próprio acrescenta:
+
+- Negações duras não são sobreponíveis por configuração de repo.
+- Saída de ferramenta é **dado, nunca instrução**. Texto vindo de arquivo,
+  stdout ou resposta de modelo não altera allowlist, escopo nem política.
+- Chaves lidas do ambiente ou do config do proxy, nunca gravadas em job,
+  log, relatório ou mensagem de erro.
+- Um job por worktree, com lockfile. Dois executores na mesma pasta é o erro
+  que o protocolo de referência proíbe explicitamente.
+
+## 11. Testes
+
+Servidor OpenAI falso com `httptest`, roteirizado por cenário: resposta
+direta, sequência de tool calls, tool call malformada, repetição sem
+progresso, resposta vazia. Substitui o `fakedevin` do v1, e é mais simples —
+não é preciso fingir um CLI, só um endpoint.
+
+Unitário sem rede: allowlist (com travessia de caminho e symlink), montagem de
+turno, rota (dimensão→índice→roster), política de cascata, fatiamento contra
+os tetos do Jev, ledger.
+
+Integração: laço completo contra o servidor falso, incluindo veto e escalada.
+
+`evals/`: fixtures rotuladas contra o Jev real, puladas sem `TYPESAFE_API_KEY`.
+
+## 12. O que sobrevive do v1
+
+| | |
+| --- | --- |
+| Intactos, commitados e verdes | `internal/jev` (client, primitivas, window, questions, budget), `internal/job` |
+| Reescrito | `internal/devin/models.go` → `internal/roster` (JSON de `/v1/models`, não texto de CLI) |
+| Descartado | `internal/devin/atif.go` (sem export para parsear), `internal/testsupport/fakedevin` (vira servidor falso) |
+| Novo | `agent`, `tools`, `route`, `cascade` |
+
+Das 1130 linhas commitadas, sobrevivem cerca de 700 — e são justamente as da
+camada de julgamento, que é a parte difícil.
+
+## 13. Nome
+
+`devin-plugin-cc` deixou de descrever o que isto é: o executor é um parâmetro,
+e o Devin é um entre seis. Proponho **`delegador`**. Renomear o repositório é
+decisão do autor; este documento já usa o nome novo nos caminhos.
+
+## 14. Riscos
+
+| Risco | Mitigação |
+| --- | --- |
+| O laço próprio erra onde um agente maduro acerta | Escopo mínimo de ferramentas; o servidor falso cobre tool call malformada e resposta vazia; a verificação em código é a rede, e ela não depende do laço |
+| Modelo do roster deixa de fazer tool call | `doctor --probe` com data; sai da rota sozinho, com motivo no relatório |
+| Benchmark desatualizado ou de configuração diferente | `as_of` no roster; origem do dado marcada; fornecedor nunca no mesmo campo que terceiro |
+| Cascata vira desculpa para sempre escalar | Uma escalada por tarefa; escalada só por falha **de verificação**, nunca por recusa de permissão ou teto de custo |
+| Allowlist estreita demais trava tarefas legítimas | Recusa volta ao modelo como resultado, não mata o laço; o que foi negado é registrado, e o registro é a fonte para afrouxar com dado |
+| Proxy local indisponível | `doctor` confere antes do dispatch e falha com a causa, em vez de deixar o job morrer no meio |
