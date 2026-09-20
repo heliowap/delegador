@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 )
 
@@ -183,8 +184,16 @@ func (j *Job) Reacquire() error {
 	return fmt.Errorf("trava da worktree %s instavel", j.Worktree)
 }
 
+// idRe e o formato que newID gera. Sem esta validacao um id como
+// "../../x" escapava da raiz do store: status/result liam diretorios
+// arbitrarios e run escrevia/executava um job.json plantado.
+var idRe = regexp.MustCompile(`^job-[0-9a-f]{10}$`)
+
 // Load le um job pelo id.
 func Load(id string) (*Job, error) {
+	if !idRe.MatchString(id) {
+		return nil, fmt.Errorf("job %q: id invalido", id)
+	}
 	root, err := Root()
 	if err != nil {
 		return nil, err

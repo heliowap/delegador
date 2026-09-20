@@ -36,8 +36,12 @@ Variáveis de ambiente:
 
 - `TYPESAFE_API_KEY` — **obrigatória**: sem ela os gates, o watchdog e a
   compactação não rodam.
+- `TYPESAFE_BASE_URL` — endpoint do Jev (padrão TypeSafe; os testes e o
+  proxy interno sobrepõem).
 - `DELEGADOR_BASE_URL` — proxy do executor (padrão
   `http://127.0.0.1:8317/v1`).
+- `OPENROUTER_BASE_URL` — endpoint de benchmarks que o probe do roster usa
+  (padrão OpenRouter).
 - `DELEGADOR_API_KEY` — só se o proxy pedir chave.
 - `DELEGADOR_ROSTER` — roster alternativo; a flag `--roster` precede.
 - `XDG_STATE_HOME` — raiz dos jobs (padrão `~/.local/state/delegador/jobs`).

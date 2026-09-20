@@ -49,15 +49,15 @@ func runRoster(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, "roster: id posicional so faz sentido com --probe")
 		return ExitUsage
 	}
-	return rosterCmd(ctx, *rosterF, *probe, id, doctorDeps{}, stdout)
+	return rosterCmd(ctx, *rosterF, *probe, id, doctorDeps{}, stdout, stderr)
 }
 
-func rosterCmd(ctx context.Context, rosterFlag string, doProbe bool, id string, deps doctorDeps, stdout io.Writer) int {
+func rosterCmd(ctx context.Context, rosterFlag string, doProbe bool, id string, deps doctorDeps, stdout, stderr io.Writer) int {
 	deps = deps.comPadroes()
 	path := resolveRosterPath(rosterFlag, deps.getenv)
 	models, err := roster.Load(path)
 	if err != nil {
-		fmt.Fprintf(stdout, "roster: %v\n", err)
+		fmt.Fprintf(stderr, "roster: %v\n", err)
 		return 1
 	}
 
@@ -77,7 +77,7 @@ func rosterCmd(ctx context.Context, rosterFlag string, doProbe bool, id string, 
 			}
 		}
 		if m == nil {
-			fmt.Fprintf(stdout, "roster: modelo %q nao esta em %s\n", id, path)
+			fmt.Fprintf(stderr, "roster: modelo %q nao esta em %s\n", id, path)
 			return 1
 		}
 		alvos = []roster.Model{*m}
@@ -97,12 +97,12 @@ func rosterCmd(ctx context.Context, rosterFlag string, doProbe bool, id string, 
 	for _, m := range alvos {
 		p, err := deps.probe(ctx, m.ID)
 		if err != nil {
-			fmt.Fprintf(stdout, "roster: %s — sondagem FALHOU: %v\n", m.ID, err)
+			fmt.Fprintf(stderr, "roster: %s — sondagem FALHOU: %v\n", m.ID, err)
 			falhas++
 			continue
 		}
 		if err := roster.WriteProbe(path, m.ID, p); err != nil {
-			fmt.Fprintf(stdout, "roster: %s — gravando: %v\n", m.ID, err)
+			fmt.Fprintf(stderr, "roster: %s — gravando: %v\n", m.ID, err)
 			falhas++
 			continue
 		}

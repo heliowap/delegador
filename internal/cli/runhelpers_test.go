@@ -103,6 +103,31 @@ func escreveRosterDoisModelos(t *testing.T) string {
 	return p
 }
 
+// escreveRosterUmModelo grava um roster com um unico elegivel: com a
+// verificacao vermelha a cascata pede escalada e a rota esgota — o run
+// sai pelo retorno cedo de route.Escolher, que e o caminho que o teste
+// de CancelReason quer exercitar.
+func escreveRosterUmModelo(t *testing.T) string {
+	t.Helper()
+	yaml := "as_of_sondagem: \"" + time.Now().Format("2006-01-02") + "\"\n" +
+		"modelos:\n" +
+		"  - id: barato\n" +
+		"    papel: barato\n" +
+		"    sondado:\n" +
+		"      tool_call: true\n" +
+		"    benchmark:\n" +
+		"      coding_index: 50\n" +
+		"      custo_por_tarefa_usd: 0.01\n" +
+		"    humano:\n" +
+		"      custo_usd_por_mtok: 0.10\n" +
+		"      habilitado: true\n"
+	p := filepath.Join(t.TempDir(), "roster.yaml")
+	if err := os.WriteFile(p, []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
 // iniciaRepoRun sobe um repo git minimo com um modulo Go real: Soma
 // subtrai em vez de somar e o unico teste commitado e fraco — quem escreve
 // o teste que prova o defeito e o executor, como manda o protocolo.

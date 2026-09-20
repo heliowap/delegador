@@ -81,6 +81,46 @@ func TestRunEscalaEDizQueEscalou(t *testing.T) {
 	}
 }
 
+// Um job vetado antes, retomado e que morre num retorno cedo (aqui: a
+// rota esgota — um modelo so no roster, escalada sem candidato) nao pode
+// salvar de volta o veto da tentativa anterior: status mentiria CANCELADO.
+func TestRunRetornoCedoNaoCarregaCancelReasonVelho(t *testing.T) {
+	env := setupRunEnv(t, cenarioQueFalhaDepoisPassa())
+	// Roster de um modelo so: a verificacao reprova o barato, a cascata
+	// pede escalada e nao ha candidato — retorno cedo de rota esgotada.
+	t.Setenv("DELEGADOR_ROSTER", escreveRosterUmModelo(t))
+
+	j, err := job.Load(env.JobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.State = job.StateFailed
+	j.CancelReason = &job.CancelReason{
+		Signal: "sem_progresso", Probability: 0.9,
+		TurnExcerpt:   "veto da tentativa anterior",
+		ResumeCommand: "delegador run --job " + env.JobID,
+	}
+	if err := j.Save(); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errBuf bytes.Buffer
+	if code := Run(context.Background(), []string{"run", "--job", env.JobID}, &out, &errBuf); code != 1 {
+		t.Fatalf("exit %d, quero 1 (rota esgotada): %s", code, errBuf.String())
+	}
+
+	depois, err := job.Load(env.JobID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if depois.CancelReason != nil {
+		t.Errorf("CancelReason sobreviveu ao retorno cedo: %+v", depois.CancelReason)
+	}
+	if depois.State != job.StateFailed {
+		t.Errorf("State = %q, quero failed", depois.State)
+	}
+}
+
 func TestRunSeparaCustoDeJevEDeExecutor(t *testing.T) {
 	env := setupRunEnv(t, cenarioQueEscreveTesteECorrige())
 	var out, errBuf bytes.Buffer

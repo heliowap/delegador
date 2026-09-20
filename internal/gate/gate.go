@@ -33,7 +33,7 @@ func DefaultThresholds() Thresholds {
 	}
 }
 
-// RepoFacts sao os fatos que o companion levanta sozinho, sem modelo.
+// RepoFacts sao os fatos que o delegador levanta sozinho, sem modelo.
 type RepoFacts struct {
 	BranchBase string   `json:"branch_base"`
 	CitedFiles []string `json:"arquivos_citados"`

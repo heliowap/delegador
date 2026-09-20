@@ -274,6 +274,9 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		TestGlobs: j.TestGlobs,
 	}
 
+	// CancelReason da tentativa anterior morre aqui: sem isso um retorno
+	// cedo (verify de infra, rota esgotada) salvaria o veto velho de novo.
+	j.CancelReason = nil
 	j.State = job.StateRunning
 	if err := j.Save(); err != nil {
 		anotaFalha(j, "run: %v", err)

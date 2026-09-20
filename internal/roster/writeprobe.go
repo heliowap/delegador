@@ -60,7 +60,13 @@ func WriteProbe(path string, id string, p Probe) error {
 		}
 		fimSondado = i + 1
 		if v, tem := valores[chave]; tem {
-			linhas[i] = strings.Repeat(" ", indent) + chave + ": " + v
+			nova := strings.Repeat(" ", indent) + chave + ": " + v
+			// Comentário de fim de linha fica — e exatamente o que este
+			// arquivo carrega ("tokens_base: 552  # maior do roster...").
+			if suf := sufixoComentario(linhas[i]); suf != "" {
+				nova += "  " + suf
+			}
+			linhas[i] = nova
 			indentFilho = indent
 			delete(valores, chave)
 		}
@@ -84,9 +90,25 @@ func WriteProbe(path string, id string, p Probe) error {
 		linhas = insere(linhas, fimSondado, novas)
 	}
 
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("roster: stat %s: %w", path, err)
+	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(strings.Join(linhas, "\n")), 0o644); err != nil {
-		return fmt.Errorf("roster: gravando %s: %w", path, err)
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode().Perm())
+	if err != nil {
+		return fmt.Errorf("roster: criando %s: %w", tmp, err)
+	}
+	if _, err := f.WriteString(strings.Join(linhas, "\n")); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("roster: gravando %s: %w", tmp, err)
+	}
+	if err := f.Sync(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("roster: fsync %s: %w", tmp, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("roster: fechando %s: %w", tmp, err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		return fmt.Errorf("roster: renomeando %s: %w", path, err)
@@ -155,6 +177,27 @@ func valorDe(l string) string {
 	}
 	_, v, _ := strings.Cut(campo, ":")
 	return valorEscalar(strings.TrimSpace(v))
+}
+
+// sufixoComentario devolve o comentário de fim de linha (do '#' em diante),
+// ou "" — a mesma leitura de aspas do tiraComentario, para re-anexar o
+// comentário quando a linha é reescrita.
+func sufixoComentario(s string) string {
+	var aspas byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case aspas != 0:
+			if c == aspas {
+				aspas = 0
+			}
+		case c == '"' || c == '\'':
+			aspas = c
+		case c == '#' && (i == 0 || s[i-1] == ' ' || s[i-1] == '\t'):
+			return s[i:]
+		}
+	}
+	return ""
 }
 
 func insere(linhas []string, pos int, novas []string) []string {

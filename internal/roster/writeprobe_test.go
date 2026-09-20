@@ -115,6 +115,34 @@ func TestWriteProbeCriaSondadoQuandoFalta(t *testing.T) {
 	t.Fatal("semsonda sumiu")
 }
 
+func TestWriteProbePreservaComentarioDeFimDeLinha(t *testing.T) {
+	// O roster de verdade tem "tokens_base: 552  # maior do roster: ..."
+	// dentro de um sondado — re-sondar nao pode apagar a nota.
+	path := escreveRoster(t, `as_of_sondagem: "2026-08-01"
+modelos:
+  - id: comnota
+    papel: barato
+    sondado:
+      tool_call: true
+      tokens_base: 552      # maior do roster: prompt injetado pelo backend
+      em: "2026-08-10"
+    humano:
+      custo_usd_por_mtok: 0.10
+      habilitado: true
+`)
+	em := time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC)
+	if err := WriteProbe(path, "comnota", Probe{ToolCall: true, TokensBase: 600, Em: em}); err != nil {
+		t.Fatalf("WriteProbe: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	if !strings.Contains(string(raw), "# maior do roster: prompt injetado pelo backend") {
+		t.Errorf("comentario de fim de linha sumiu:\n%s", raw)
+	}
+	if !strings.Contains(string(raw), "tokens_base: 600") {
+		t.Errorf("valor nao atualizado:\n%s", raw)
+	}
+}
+
 func TestWriteProbeModeloDesconhecidoErra(t *testing.T) {
 	path := escreveRoster(t, rosterBase)
 	if err := WriteProbe(path, "fantasma", Probe{Em: time.Now()}); err == nil {
