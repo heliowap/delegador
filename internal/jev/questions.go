@@ -6,7 +6,7 @@ package jev
 
 // QuestionsVersion muda sempre que o texto de uma pergunta muda, para que a
 // auditoria em jev.jsonl continue interpretavel depois de uma recalibragem.
-const QuestionsVersion = "1"
+const QuestionsVersion = "2"
 
 // DelegabilityQuestions julga se a tarefa deve ser delegada (spec §6.1).
 func DelegabilityQuestions() map[string]Question {
@@ -119,6 +119,14 @@ func RouteQuestions() map[string]Question {
 				"smart":        "Precisa executar comandos, tipicamente rodar teste ou lint, alem de editar arquivos.",
 			},
 		},
+		"dimensao_dominante": Choice{
+			Instructions: "Identifique qual capacidade a tarefa em `tarefa.texto` mais exige de quem for executa-la; a dimensao escolhida define qual indice de benchmark corta o roster.",
+			Criteria: map[string]string{
+				"mecanica":   "Transformar codigo de forma local e ja determinada: corrigir um comparador, renomear um identificador, ajustar um formato, transcrever o trecho que o briefing descreve.",
+				"raciocinio": "Entender o problema para decidir a solucao: deduzir a causa de um sintoma, reconstruir um fluxo de dados, montar a correcao a partir de partes espalhadas.",
+				"agentica":   "Operar ferramentas em sequencia dentro de um ambiente ate terminar: rodar comando, ler a saida, decidir o proximo passo, insistir ou trocar de tatica conforme o resultado.",
+			},
+		},
 		"complexidade": Score{
 			Instructions: "Avalie quanto raciocinio a tarefa em `tarefa.texto` exige de quem for executa-la, considerando o que precisa ser entendido antes de escrever a primeira linha.",
 			Criteria: []string{
@@ -131,9 +139,27 @@ func RouteQuestions() map[string]Question {
 	}
 }
 
+// AutonomyQuestion mede se o briefing deixa a execucao determinada (spec §8).
+// A fronteira vem de medicao, nao de intuicao: 16 das 18 tarefas do plano v1
+// eram 72-91% codigo literal, e o swe-2 executou oito com fidelidade e morreu
+// na primeira que exigia montagem. Tarefa autocontida grande cabe num modelo
+// barato; tarefa pequena que exige decisao, nao.
+func AutonomyQuestion() map[string]Question {
+	return map[string]Question{
+		"tarefa_autocontida": Noul{
+			Instructions: "O briefing em `briefing.texto` determina o que fazer a ponto de executar a tarefa ser transcrever, sem que quem executa precise decidir no caminho.",
+			Criteria: &NoulCriteria{
+				True:  "O briefing diz o que mudar e onde, com o codigo novo escrito ou descrito linha a linha e os comandos prontos para colar; quem executa so transcreve e confere o resultado.",
+				False: "O briefing aponta o defeito ou o objetivo, mas deixa a correcao em aberto: quem executa precisa entender o codigo, montar a solucao ou escolher entre caminhos possiveis.",
+			},
+		},
+	}
+}
+
 // WatchdogQuestions julgam um turno em andamento (spec §6.3). O que e
 // detectavel por codigo (comando repetido, arquivo fora do escopo) nao esta
-// aqui de proposito.
+// aqui de proposito; bloqueio_de_permissao tambem saiu: a permissao virou
+// allowlist em codigo e o estado que ela detectava nao existe mais.
 func WatchdogQuestions() map[string]Question {
 	return map[string]Question{
 		"sem_progresso": Noul{
@@ -141,13 +167,6 @@ func WatchdogQuestions() map[string]Question {
 			Criteria: &NoulCriteria{
 				True:  "O turno repete o que ja foi feito, reexplora o que ja foi visto, ou tenta a mesma coisa de novo sem mudar nada relevante na tentativa.",
 				False: "O turno acrescenta informacao nova, avanca para uma etapa seguinte, ou muda de abordagem depois de um resultado.",
-			},
-		},
-		"bloqueio_de_permissao": Noul{
-			Instructions: "O turno em `janela.turno_atual` mostra o agente parado a espera de uma confirmacao humana que nao vai chegar, porque ele roda em modo nao interativo.",
-			Criteria: &NoulCriteria{
-				True:  "Ha pedido de aprovacao, aviso de permissao negada, ou uma ferramenta em estado pendente aguardando resposta.",
-				False: "O agente segue trabalhando, mesmo que um comando tenha falhado por outro motivo.",
 			},
 		},
 	}

@@ -1,0 +1,45 @@
+{
+  "rota": [
+    {
+      "nome": "correcao mecanica descrita linha a linha",
+      "texto": "# Tarefa\n\nEm `pkg/svc/rota.go:42`, a condicao `if user.ID == \"\"` impede a resposta 401 que `docs/adr/0007.md` exige quando o token expira.\n\n## Correcao\n\nTroque a condicao por `if token.Expirado() { return ErrNaoAutorizado }` e adicione `TestRotaTokenExpirado` cobrindo o caso acima.\n\n```bash\ngo test ./pkg/svc/ -run TestRotaTokenExpirado\n```",
+      "esperado": { "dimensao_dominante": "mecanica", "complexidade_maxima": 1.0 }
+    },
+    {
+      "nome": "causa de sintoma ainda desconhecida",
+      "texto": "# Tarefa\n\nSob carga, o mesmo pagamento as vezes e processado duas vezes. A suspeita e uma janela entre a leitura do status e a atualizacao em `pkg/fila/`, mas a causa exata nao esta identificada.\n\n## Correcao\n\nDescubra onde a janela existe, corrija e prove com um teste que reproduz a duplicacao.",
+      "esperado": { "dimensao_dominante": "raciocinio", "complexidade_minima": 2.0 }
+    },
+    {
+      "nome": "sequencia de ferramentas ate o fim",
+      "texto": "# Tarefa\n\nO script `scripts/migrar.sh` falha em algum ponto ainda desconhecido.\n\n## Correcao\n\nRode o script, observe a saida, identifique em que etapa ele para, corrija e rode de novo ate completar; o ambiente responde a cada tentativa e o caminho so aparece executando.",
+      "esperado": { "dimensao_dominante": "agentica", "complexidade_minima": 1.0 }
+    }
+  ],
+  "autonomia": [
+    {
+      "nome": "briefing com o codigo novo ja escrito",
+      "texto": "# Tarefa\n\nEm `internal/jev/questions.go`, dentro de `RouteQuestions()`, adicione a entrada `dimensao_dominante` exatamente como no trecho:\n\n```go\n\"dimensao_dominante\": Choice{\n\tInstructions: \"Identifique qual capacidade a tarefa mais exige.\",\n\tCriteria: map[string]string{\n\t\t\"mecanica\":   \"Transformar codigo de forma local e ja determinada.\",\n\t\t\"raciocinio\": \"Entender o problema para decidir a solucao.\",\n\t\t\"agentica\":   \"Operar ferramentas em sequencia ate terminar.\",\n\t},\n},\n```\n\nDepois rode `go test ./internal/jev/` e confirme o verde.",
+      "esperado": { "tarefa_autocontida": true }
+    },
+    {
+      "nome": "briefing que so aponta o sintoma",
+      "texto": "# Tarefa\n\nO login falha de forma intermitente quando o cache de sessao esta quente. Nao se sabe onde esta o defeito.\n\n## Correcao\n\nEncontre a causa e corrija; escreva um teste que a reproduza.",
+      "esperado": { "tarefa_autocontida": false }
+    }
+  ],
+  "watchdog": [
+    {
+      "nome": "turno saudavel",
+      "atual": "turno 3: corrigindo\n  edit(pkg/svc/rota.go) -> [ok] 1 hunk\n",
+      "previos": "turno 2: confirmando o vermelho\n  exec(go test ./pkg/svc/) -> [ok] FAIL: TestRota\n",
+      "esperado": { "sem_progresso": false }
+    },
+    {
+      "nome": "travado repetindo",
+      "atual": "turno 6: tentando de novo\n  exec(go test ./x/) -> [erro] FAIL: cannot find module\n",
+      "previos": "turno 4: tentando de novo\n  exec(go test ./x/) -> [erro] FAIL: cannot find module\nturno 5: tentando de novo\n  exec(go test ./x/) -> [erro] FAIL: cannot find module\n",
+      "esperado": { "sem_progresso": true }
+    }
+  ]
+}

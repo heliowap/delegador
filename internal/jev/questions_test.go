@@ -119,3 +119,41 @@ func TestEverySetLeavesRoomForState(t *testing.T) {
 		}
 	}
 }
+
+func TestDimensaoDominanteTemAsTresComBenchmark(t *testing.T) {
+	ch, ok := RouteQuestions()["dimensao_dominante"].(Choice)
+	if !ok {
+		t.Fatal("dimensao_dominante deveria ser Choice")
+	}
+	// As opcoes existem porque as tres tem coluna de benchmark. Dimensao sem
+	// medida correspondente seria resposta bonita que o codigo nao usa.
+	for _, o := range []string{"mecanica", "raciocinio", "agentica"} {
+		if _, ok := ch.Criteria[o]; !ok {
+			t.Errorf("opcao %q ausente", o)
+		}
+	}
+	if len(ch.Criteria) != 3 {
+		t.Errorf("quero exatamente 3 opcoes, tenho %d", len(ch.Criteria))
+	}
+}
+
+func TestTarefaAutocontidaExiste(t *testing.T) {
+	n, ok := AutonomyQuestion()["tarefa_autocontida"].(Noul)
+	if !ok {
+		t.Fatal("tarefa_autocontida deveria ser Noul")
+	}
+	if n.Criteria == nil || n.Criteria.True == "" || n.Criteria.False == "" {
+		t.Error("a fronteira entre transcrever e decidir precisa estar descrita")
+	}
+}
+
+// Saiu do Jev quando a permissao virou allowlist em codigo: o estado que ela
+// detectava nao existe mais.
+func TestBloqueioDePermissaoNaoEhMaisPerguntaJev(t *testing.T) {
+	if _, existe := WatchdogQuestions()["bloqueio_de_permissao"]; existe {
+		t.Error("bloqueio_de_permissao deveria ter saido do conjunto")
+	}
+	if len(WatchdogQuestions()) != 1 {
+		t.Errorf("o watchdog do v2 tem uma pergunta so, tem %d", len(WatchdogQuestions()))
+	}
+}
