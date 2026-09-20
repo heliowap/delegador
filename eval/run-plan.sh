@@ -3,7 +3,7 @@
 # teste entre elas. Para na primeira tarefa que ficar vermelha.
 set -u
 
-WT="${WT:-$HOME/VSCode/devin-plugin-cc-impl}"
+WT="${WT:-$HOME/VSCode/delegador-impl}"
 RUN="${RUN:-/tmp/devin-plugin-run}"
 PLAN="${PLAN:-$WT/docs/superpowers/plans/2026-09-20-devin-plugin-cc.md}"
 MODEL="${MODEL:-swe-2-max}"

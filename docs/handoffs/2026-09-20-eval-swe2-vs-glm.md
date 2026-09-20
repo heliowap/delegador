@@ -15,14 +15,21 @@ Resultado esperado: um número por métrica, por modelo, e uma recomendação de
 qual deve ser o padrão da cascata. Não é para implementar o plugin — é para
 medir os dois executores.
 
+> **Renomeado em 2026-09-20, depois deste handoff ser escrito.**
+> `devin-plugin-cc` virou `delegador`; `devin-plugin-cc-impl` virou
+> `delegador-impl`. Os caminhos antigos continuam funcionando por symlink, e
+> as worktrees foram reparadas com `git worktree repair`. **O module path do
+> Go segue `github.com/heliowap/devin-plugin-cc` de propósito** — trocá-lo
+> quebraria as worktrees do eval, que partem de `98bce8e`. Não troque.
+
 ## Estado verificado (confira antes de confiar)
 
 ```bash
-cd ~/VSCode/devin-plugin-cc      # docs, spec, plano, roster, eval
-cd ~/VSCode/devin-plugin-cc-impl # implementação; branch impl/plano-inicial
+cd ~/VSCode/delegador      # docs, spec, plano, roster, eval
+cd ~/VSCode/delegador-impl # implementação; branch impl/plano-inicial
 ```
 
-- `devin-plugin-cc-impl` está em `98bce8e`, tarefas 1 a 8 do plano feitas,
+- `delegador-impl` está em `98bce8e`, tarefas 1 a 8 do plano feitas,
   `go vet ./...` e `go test ./...` verdes. **Este é o ponto de partida dos dois
   braços.** Confirme com `git log --oneline -1` e rode a suíte antes de começar.
 - Tarefas 9 a 18 **não** foram executadas.
@@ -46,17 +53,17 @@ travam, quanto custa, quanto demora.
 
 ```bash
 # worktrees irmãs, mesma base, uma por modelo
-cd ~/VSCode/devin-plugin-cc
+cd ~/VSCode/delegador
 git -C ../devin-plugin-cc-impl worktree add -b eval/swe2 ~/VSCode/eval-swe2 98bce8e
 git -C ../devin-plugin-cc-impl worktree add -b eval/glm  ~/VSCode/eval-glm  98bce8e
 
 # um modelo por vez; rodar em paralelo distorce latência e quota
 MODEL=swe-2-max        WT=~/VSCode/eval-swe2 RUN=/tmp/eval-swe2 \
-  PLAN=~/VSCode/devin-plugin-cc/docs/superpowers/plans/2026-09-20-devin-plugin-cc.md \
+  PLAN=~/VSCode/delegador/docs/superpowers/plans/2026-09-20-devin-plugin-cc.md \
   START=9 END=18 bash eval/run-plan.sh
 
 MODEL=glm-5-3-flash-max WT=~/VSCode/eval-glm  RUN=/tmp/eval-glm \
-  PLAN=~/VSCode/devin-plugin-cc/docs/superpowers/plans/2026-09-20-devin-plugin-cc.md \
+  PLAN=~/VSCode/delegador/docs/superpowers/plans/2026-09-20-devin-plugin-cc.md \
   START=9 END=18 bash eval/run-plan.sh
 ```
 
