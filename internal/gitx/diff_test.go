@@ -84,3 +84,50 @@ func TestRevertNonTestKeepsTestChanges(t *testing.T) {
 		t.Error("o arquivo de teste nao pode sumir na reversao")
 	}
 }
+
+// Arquivo novo de nao-teste sai DE VERDADE: `checkout --` restaura o blob
+// vazio do intent-to-add e deixaria um stub de 0 bytes — um .go vazio
+// quebra o build da tentativa seguinte e infla a sonda de mutacao.
+func TestRevertNonTestDeletesNewFiles(t *testing.T) {
+	dir := repoDirty(t)
+	ctx := context.Background()
+
+	// Marca o intent-to-add como o verify faz (gitx.Diff roda add -AN):
+	// novo.go vira ` A` no status; soltinho.go, criado depois, fica `??`.
+	// Os dois caminhos de arquivo novo tem que remover de verdade.
+	if _, err := Diff(ctx, dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "novo.go"), []byte("package exemplo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := output(ctx, dir, "add", "-AN"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "soltinho.go"), []byte("package exemplo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RevertNonTest(ctx, dir, []string{"*_test.go"}); err != nil {
+		t.Fatalf("RevertNonTest: %v", err)
+	}
+
+	for _, name := range []string{"novo.go", "soltinho.go"} {
+		fi, err := os.Stat(filepath.Join(dir, name))
+		if err == nil {
+			t.Errorf("%s ficou (%d bytes) — era para sumir, nao esvaziar", name, fi.Size())
+		} else if !os.IsNotExist(err) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "soma.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "return a - b") {
+		t.Error("a correcao deveria ter sido desfeita")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "soma_test.go")); err != nil {
+		t.Error("o arquivo de teste nao pode sumir na reversao")
+	}
+}

@@ -19,6 +19,7 @@ import (
 type runEnv struct {
 	JobID    string
 	Worktree string
+	Requests *[]testsupport.Request // o que a API fake recebeu, na ordem
 }
 
 // setupRunEnv monta o cenario inteiro: temporarios para estado e worktree,
@@ -38,7 +39,7 @@ func setupRunEnv(t *testing.T, cenario testsupport.Scenario) runEnv {
 		"resultado_necessario_verbatim": 0.9,
 		"relatorio_afirma_verde":        0.9,
 	}))
-	baseURL, _ := testsupport.StartFakeAPI(t, cenario)
+	baseURL, requests := testsupport.StartFakeAPI(t, cenario)
 	t.Setenv("DELEGADOR_BASE_URL", baseURL)
 	t.Setenv("DELEGADOR_ROSTER", escreveRosterDoisModelos(t))
 
@@ -64,7 +65,7 @@ func setupRunEnv(t *testing.T, cenario testsupport.Scenario) runEnv {
 	if err := os.WriteFile(j.Path("briefing.md"), []byte(briefing), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return runEnv{JobID: j.ID, Worktree: worktree}
+	return runEnv{JobID: j.ID, Worktree: worktree, Requests: requests}
 }
 
 // escreveRosterDoisModelos grava um roster com dois elegiveis no formato

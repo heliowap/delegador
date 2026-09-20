@@ -156,6 +156,9 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if verdict.Delegable {
 		path := *rosterF
 		if path == "" {
+			path = os.Getenv("DELEGADOR_ROSTER")
+		}
+		if path == "" {
 			path = defaultRosterPath()
 		}
 		models, err := roster.Load(path)

@@ -133,17 +133,9 @@ func Create(worktree string) (*Job, error) {
 	j.dir = filepath.Join(root, j.ID)
 
 	lock := lockPath(root, worktree)
-	f, err := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-	if err != nil {
-		if os.IsExist(err) {
-			owner, _ := os.ReadFile(lock)
-			return nil, fmt.Errorf("worktree %s ja esta em uso pelo job %s", worktree, string(owner))
-		}
+	if err := j.Reacquire(); err != nil {
 		return nil, err
 	}
-	_, _ = f.WriteString(j.ID)
-	f.Close()
-
 	if err := os.MkdirAll(j.dir, 0o755); err != nil {
 		_ = os.Remove(lock)
 		return nil, err
@@ -153,6 +145,42 @@ func Create(worktree string) (*Job, error) {
 		return nil, err
 	}
 	return j, nil
+}
+
+// Reacquire (re)cria a trava da worktree em nome do job: ausente, cria;
+// existente com o mesmo id, e idempotente (a trava ja e nossa); existente
+// com id alheio, devolve erro nomeando o dono. A retomada de um job cuja
+// trava ja foi solta usa isto para nunca rodar destravada.
+func (j *Job) Reacquire() error {
+	root, err := Root()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".locks"), 0o755); err != nil {
+		return err
+	}
+	lock := lockPath(root, j.Worktree)
+	for range 2 {
+		f, err := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err == nil {
+			_, _ = f.WriteString(j.ID)
+			return f.Close()
+		}
+		if !os.IsExist(err) {
+			return err
+		}
+		owner, rerr := os.ReadFile(lock)
+		switch {
+		case rerr == nil && string(owner) == j.ID:
+			return nil
+		case rerr == nil:
+			return fmt.Errorf("worktree %s ja esta em uso pelo job %s", j.Worktree, string(owner))
+		case !os.IsNotExist(rerr):
+			return rerr
+		}
+		// A trava sumiu entre o create e a leitura — repete uma vez.
+	}
+	return fmt.Errorf("trava da worktree %s instavel", j.Worktree)
 }
 
 // Load le um job pelo id.
@@ -174,7 +202,9 @@ func Load(id string) (*Job, error) {
 	return &j, nil
 }
 
-// Release solta a trava da worktree do job.
+// Release solta a trava da worktree do job — mas so a dele: a trava que
+// existe com outro id e de outro job, e Release a deixa intacta. Ausente
+// ou alheia, nao e erro: nao havia trava nossa para soltar.
 func Release(id string) error {
 	j, err := Load(id)
 	if err != nil {
@@ -184,8 +214,16 @@ func Release(id string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(lockPath(root, j.Worktree)); err != nil && !os.IsNotExist(err) {
+	lock := lockPath(root, j.Worktree)
+	owner, err := os.ReadFile(lock)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
-	return nil
+	if string(owner) != j.ID {
+		return nil // trava alheia: nao e nossa para soltar
+	}
+	return os.Remove(lock)
 }

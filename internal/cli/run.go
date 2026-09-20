@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -91,36 +92,79 @@ func escolhaDoJob(models []roster.Model, j *job.Job) route.Escolha {
 	return e
 }
 
+// evidenciaCap e o teto por bloco de evidencia (saida de passo e diff) —
+// mesma ordem do digestFieldCap: a tentativa reprovada nao pode estourar
+// o contexto da tentativa seguinte, e o corte e declarado no texto.
+const evidenciaCap = 4000
+
+func cortaEvidencia(s string) string {
+	if len(s) <= evidenciaCap {
+		return s
+	}
+	return fmt.Sprintf("%s\n[%d bytes cortados]", s[:evidenciaCap], len(s)-evidenciaCap)
+}
+
 // evidenciaEscalada monta o contexto da tentativa seguinte: a saida dos
 // passos e o diff deixado pela tentativa reprovada, verbatim, como a
-// cascata manda (spec §6.5).
-func evidenciaEscalada(rep verify.Report) string {
+// cascata manda (spec §6.5). revertido avisa se o revert rodou de fato —
+// sem ele a frase final mentiria sobre o estado da worktree.
+func evidenciaEscalada(rep verify.Report, revertido bool) string {
 	var sb strings.Builder
 	sb.WriteString("\n\n---\n\nA tentativa anterior reprovou na verificacao. Evidencia verbatim:\n\n")
 	for _, s := range rep.Steps {
 		if s.Skipped {
 			continue
 		}
-		fmt.Fprintf(&sb, "### passo %s: exit %d\n%s\n", s.Name, s.ExitCode, s.Stdout)
+		fmt.Fprintf(&sb, "### passo %s: exit %d\n%s\n", s.Name, s.ExitCode, cortaEvidencia(s.Stdout))
 	}
 	if rep.Diff != "" {
-		fmt.Fprintf(&sb, "### diff deixado pela tentativa\n%s\n", rep.Diff)
+		fmt.Fprintf(&sb, "### diff deixado pela tentativa\n%s\n", cortaEvidencia(rep.Diff))
 	}
-	sb.WriteString("As mudancas de nao-teste foram revertidas; o teste vermelho ficou como reproducao.\n")
+	if revertido {
+		sb.WriteString("As mudancas de nao-teste foram revertidas; o teste vermelho ficou como reproducao.\n")
+	} else {
+		sb.WriteString("O revert das mudancas de nao-teste FALHOU — a worktree pode ainda carregar codigo da tentativa reprovada.\n")
+	}
 	return sb.String()
 }
 
 // guardaVerify persiste o verify da tentativa: "os dois diffs" do spec —
 // cada tentativa deixa o proprio Report e o proprio diff, para o humano
-// que recebe o caso quando a cascata bate no teto.
-func guardaVerify(j *job.Job, rep verify.Report) {
-	n := j.Escaladas + 1
-	if raw, err := json.MarshalIndent(rep, "", "  "); err == nil {
-		_ = os.WriteFile(j.Path(fmt.Sprintf("verify-%d.json", n)), raw, 0o644)
+// que recebe o caso quando a cascata bate no teto. O indice vem dos
+// verify-*.json ja existentes: na retomada a numeracao continua em vez
+// de sobrescrever o artefato da tentativa anterior.
+func guardaVerify(j *job.Job, rep verify.Report, stderr io.Writer) {
+	n := 1
+	if entries, err := os.ReadDir(j.Dir()); err == nil {
+		for _, e := range entries {
+			name := e.Name()
+			if !strings.HasPrefix(name, "verify-") || !strings.HasSuffix(name, ".json") {
+				continue
+			}
+			k, err := strconv.Atoi(name[len("verify-") : len(name)-len(".json")])
+			if err == nil && k >= n {
+				n = k + 1
+			}
+		}
+	}
+	raw, err := json.MarshalIndent(rep, "", "  ")
+	if err != nil {
+		fmt.Fprintf(stderr, "run: serializando verify-%d: %v\n", n, err)
+	} else if err := os.WriteFile(j.Path(fmt.Sprintf("verify-%d.json", n)), raw, 0o644); err != nil {
+		fmt.Fprintf(stderr, "run: gravando verify-%d.json: %v\n", n, err)
 	}
 	if rep.Diff != "" {
-		_ = os.WriteFile(j.Path(fmt.Sprintf("verify-%d.diff", n)), []byte(rep.Diff), 0o644)
+		if err := os.WriteFile(j.Path(fmt.Sprintf("verify-%d.diff", n)), []byte(rep.Diff), 0o644); err != nil {
+			fmt.Fprintf(stderr, "run: gravando verify-%d.diff: %v\n", n, err)
+		}
 	}
+}
+
+// anotaFalha deixa em result.txt a causa de uma saida sem relatorio — o
+// `result` tem o que mostrar em vez de arquivo ausente ou texto velho.
+func anotaFalha(j *job.Job, format string, a ...any) {
+	msg := fmt.Sprintf(format+"\n", a...)
+	_ = os.WriteFile(j.Path("result.txt"), []byte(msg), 0o644)
 }
 
 func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -132,6 +176,14 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		maxTurns = fs.Int("max-turns", runMaxTurns, "teto de turnos do laco por tentativa")
 	)
 	if err := fs.Parse(args); err != nil {
+		return ExitUsage
+	}
+	if fs.NArg() > 0 {
+		fmt.Fprintln(stderr, "run: argumento posicional inesperado — uso: run --job <id> [--roster <path>] [--max-turns N]")
+		return ExitUsage
+	}
+	if *maxTurns <= 0 {
+		fmt.Fprintln(stderr, "run: --max-turns precisa ser > 0")
 		return ExitUsage
 	}
 	if *jobID == "" {
@@ -150,10 +202,18 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "run: job %s esta %s; run aceita planned ou failed\n", j.ID, j.State)
 		return 1
 	}
+	// Na retomada a trava ja foi solta pelo Release terminal — readquire
+	// antes de rodar: mesma worktree, mesmo dono, e se outro job tomou a
+	// vaga o erro nomeia o dono em vez de executar destravado.
+	if err := j.Reacquire(); err != nil {
+		anotaFalha(j, "run: %v", err)
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return 1
+	}
 	defer func() {
 		// Estado terminal solta a trava: o job encerrou e a worktree
 		// volta a aceitar delegacao. planned/running mantem — a vaga
-		// ainda e deste job.
+		// ainda e deste job. Release confere o dono: trava alheia fica.
 		if j.State.Terminal() {
 			_ = job.Release(j.ID)
 		}
@@ -170,20 +230,24 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	models, err := roster.Load(rosterPath)
 	if err != nil {
+		anotaFalha(j, "run: %v", err)
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return 1
 	}
 
 	briefing, err := os.ReadFile(j.Path("briefing.md"))
 	if err != nil {
+		anotaFalha(j, "run: lendo briefing: %v", err)
 		fmt.Fprintf(stderr, "run: lendo briefing: %v\n", err)
 		return 1
 	}
 
 	key := os.Getenv("TYPESAFE_API_KEY")
 	if key == "" {
-		fmt.Fprintln(stderr, "run: TYPESAFE_API_KEY ausente. Sem ela a pre-condicao "+
-			"e a compactacao nao rodam, e executar sem watchdog e o que este plugin evita.")
+		msg := "run: TYPESAFE_API_KEY ausente. Sem ela a pre-condicao " +
+			"e a compactacao nao rodam, e executar sem watchdog e o que este plugin evita."
+		anotaFalha(j, "%s", msg)
+		fmt.Fprintln(stderr, msg)
 		return 1
 	}
 	jevClient := jev.New(jev.Options{APIKey: key, BaseURL: os.Getenv("TYPESAFE_BASE_URL")})
@@ -212,6 +276,7 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	j.State = job.StateRunning
 	if err := j.Save(); err != nil {
+		anotaFalha(j, "run: %v", err)
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return 1
 	}
@@ -257,8 +322,10 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		// Um registro por turno com o preco vigente na hora — os tokens
 		// sao os que a API reportou, nunca estimativa local (spec §9).
 		for _, t := range out.Turns {
-			_ = execLedger.Record("turno",
-				t.Usage.PromptTokens, t.Usage.CompletionTokens, precoIn, precoOut)
+			if err := execLedger.Record("turno",
+				t.Usage.PromptTokens, t.Usage.CompletionTokens, precoIn, precoOut); err != nil {
+				fmt.Fprintf(stderr, "run: gravando executor.jsonl: %v\n", err)
+			}
 		}
 		if runErr != nil {
 			fmt.Fprintf(stderr, "run: laco do executor: %v\n", runErr)
@@ -271,12 +338,11 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "run: verificacao nao completou: %v\n", err)
 			j.State = job.StateFailed
 			_ = j.Save()
-			msg := fmt.Sprintf("verificacao nao completou por falha de infraestrutura: %v\n", err)
-			_ = os.WriteFile(j.Path("result.txt"), []byte(msg), 0o644)
-			fmt.Fprint(stdout, msg)
+			anotaFalha(j, "verificacao nao completou por falha de infraestrutura: %v", err)
+			fmt.Fprintf(stdout, "verificacao nao completou por falha de infraestrutura: %v\n", err)
 			return 1
 		}
-		guardaVerify(j, rep)
+		guardaVerify(j, rep, stderr)
 
 		d := cascade.Avaliar(out, rep, j.Escaladas, cascade.DefaultConfig())
 		if !d.Escala {
@@ -284,49 +350,78 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			break
 		}
 
-		// Escalada: Escaladas, Percentil e Model sobem no MESMO Save —
-		// um restart entre o degrau e o registro nao pode ver um sem o
-		// outro, entao nao reaplica o degrau nem perde o modelo novo.
-		j.Escaladas++
-		j.Percentil = min(1.0, j.Percentil+d.NovoPercentil)
+		// Re-roteio ANTES de tocar o job: Escolher primeiro — o modelo que
+		// falhou sai do conjunto (escalar e trocar de modelo, nao repetir
+		// o que a verificacao reprovou) — e so depois sobem Escaladas,
+		// Percentil e Model, no MESMO Save. Sem rota o job falha com o
+		// estado inteiro: um restart nao reaplica degrau ja contado nem
+		// ve Escaladas subir sem o modelo novo.
+		novoPercentil := min(1.0, j.Percentil+d.NovoPercentil)
 		elegiveis, motivos := roster.Elegiveis(models, sondagemMaxIdade, time.Now())
 		for _, m := range motivos {
 			fmt.Fprintf(stderr, "roster: %s\n", m)
 		}
-		nova, err := route.Escolher(elegiveis, route.Dimensao(j.Dimensao), j.Percentil)
+		var candidatos []roster.Model
+		for _, m := range elegiveis {
+			if m.ID != j.Model {
+				candidatos = append(candidatos, m)
+			}
+		}
+		nova, err := route.Escolher(candidatos, route.Dimensao(j.Dimensao), novoPercentil)
 		if err != nil {
 			fmt.Fprintf(stderr, "run: escalada sem re-roteio: %v\n", err)
 			j.State = job.StateFailed
 			_ = j.Save()
+			anotaFalha(j, "escalada sem re-roteio: %v", err)
 			return 1
 		}
 		dePara = j.Model + " -> " + nova.Modelo.ID
 		motivoEscalada = d.Motivo
+		j.Escaladas++
+		j.Percentil = novoPercentil
 		j.Model = nova.Modelo.ID
 		escolha = nova
 		escalou = true
 		if err := j.Save(); err != nil {
+			anotaFalha(j, "run: %v", err)
 			fmt.Fprintf(stderr, "run: %v\n", err)
 			return 1
 		}
 		precoIn, precoOut = precosDo(models, j.Model, stderr)
 
-		// A evidencia da falha entra verbatim no contexto do modelo mais
-		// forte; o revert desfaz so o que nao e teste — o teste vermelho
-		// fica como reproducao (spec §6.5).
-		contexto = evidenciaEscalada(rep)
+		// O revert desfaz so o que nao e teste — o teste vermelho fica
+		// como reproducao — e a evidencia entra verbatim no contexto do
+		// modelo mais forte (spec §6.5). Revert primeiro, evidencia
+		// depois: a frase final so pode afirmar o revert que aconteceu.
+		revertido := true
 		if err := gitx.RevertNonTest(ctx, j.Worktree, j.TestGlobs); err != nil {
 			fmt.Fprintf(stderr, "run: revertendo mudancas de nao-teste: %v\n", err)
+			revertido = false
 		}
+		contexto = evidenciaEscalada(rep, revertido)
 	}
 
 	concluido := out.Stop == "final" && rep.Green() && rep.MutationProved
+	// Veto da pre-condicao vira CancelReason persistida: a evidencia do
+	// corte (sinal, probabilidade, trecho, comando de retomada) fica no
+	// job.json — e no bloco CANCELADO do relatorio — em vez de evaporar
+	// com o processo.
+	if out.Veto != nil {
+		j.CancelReason = &job.CancelReason{
+			Signal:        out.Veto.Signal,
+			Probability:   out.Veto.Probability,
+			TurnExcerpt:   out.Veto.Excerpt,
+			ResumeCommand: "delegador run --job " + j.ID,
+			At:            time.Now(),
+		}
+	}
 	if concluido {
 		j.State = job.StateCompleted
 	} else {
 		j.State = job.StateFailed
 	}
 	if err := j.Save(); err != nil {
+		anotaFalha(j, "run: %v", err)
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return 1
 	}
