@@ -9,6 +9,10 @@
 #              validade sem aviso — `doctor --probe` remede.
 #   benchmark: OpenRouter /api/v1/benchmarks, as_of 2026-09-20T00:03Z.
 #              Fonte externa, sobre uma configuração que pode não ser a sua.
+#   fornecedor: publicado por quem fez o modelo. Útil como pista, nunca como
+#              prova: o método declarado favorece o próprio modelo (harness da
+#              casa, melhor configuração de esforço) contra números públicos
+#              alheios que podem não ter esse tratamento.
 #   humano:    você preenche. O sistema nunca escreve aqui.
 #
 # `custo_usd_por_mtok` é o SEU custo de servir, não o preço do OpenRouter.
@@ -123,9 +127,12 @@ modelos:
       custo_usd_por_mtok: null
       habilitado: true
     nota: >
-      Topo de coding_index entre os 149 modelos medidos. Destino de escalada
-      quando a verificação em código reprovar o barato. Custo por tarefa é o
-      maior do roster — só entra por falha provada, nunca por precaução.
+      Topo de coding_index entre os 149 modelos medidos (81.6) e, pelos
+      números do próprio concorrente, o dobro do SWE-2 no Terminal-Bench 4
+      (0.558 contra 0.273). Duas fontes independentes o apontam como o melhor
+      do roster para trabalho agêntico difícil — é o destino de escalada.
+      Custo por tarefa é o maior do roster: só entra por falha provada pela
+      verificação em código, nunca por precaução.
 
   - id: cpa-claude-opus-5(low)
     papel: forte
@@ -155,7 +162,7 @@ modelos:
       valem como teto, não como o que você vai obter.
 
   - id: devin/swe-2
-    papel: forte
+    papel: barato          # era `forte`; corrigido por evidência, ver nota
     permaslug: null
     mapeamento: ausente
     sondado:
@@ -167,9 +174,32 @@ modelos:
     humano:
       custo_usd_por_mtok: null
       habilitado: true
+    fornecedor:
+      # cognition.com/blog/swe-2. Método declarado: resultado público quando
+      # existe, senão avaliação interna no harness próprio, reportando o
+      # melhor esforço. Assimétrico a favor do SWE-2 — ler como teto.
+      frontiercode_1_1: 0.500      # Fable 5.1: 0.509 | GPT-6 Astra: 0.533
+      deepswe_1_1: 0.730           # Fable 5.1: 0.674 | GPT-6 Astra: 0.741
+      terminal_bench_2_1: 0.928    # Fable 5.1: 0.914 — melhor do comparativo
+      terminal_bench_4: 0.273      # Fable 5.1: 0.558 | GPT-6 Astra: 0.579
+      passos_ate_primeira_edicao: 18
     nota: >
+      Classificado `barato`, não `forte`. Três fontes independentes convergem:
+      (1) o próprio fornecedor publica 0.273 no Terminal-Bench 4 contra 0.558
+      do Fable 5.1 — forte no benchmark saturado (TB2.1), colapso no sucessor
+      difícil, assinatura de otimização específica; (2) o benchmark de terceiro
+      dá ao Fable 5.1 o maior coding_index das 149 entradas; (3) observação
+      direta em 2026-09-20 — executou 8 tarefas deste plano com fidelidade,
+      mas 98% do código estava escrito no plano, e ele morreu na tarefa 9, a
+      primeira que exigia montagem própria. A Cognition o posiciona por
+      eficiência: 64% mais barato que o Fable com paridade no FrontierCode,
+      primeira edição real em 18 passos contra 48 do antecessor. Isso é
+      argumento de camada barata, e foi assim que reclassifiquei.
+
       NÃO MEDIDO pelo OpenRouter — nenhum permaslug com "swe" existe nas 256
-      entradas. Elegível apenas por viabilidade e custo, nunca por índice, e
-      o relatório precisa dizer isso quando ele for escolhido. Ausência de
-      nota não é nota baixa. Emite reasoning_content. Foi o executor das 8
-      tarefas implementadas neste repo em 2026-09-20.
+      entradas. Elegível por viabilidade e custo, nunca por índice, e o
+      relatório precisa dizer isso quando ele for escolhido. Ausência de nota
+      de terceiro não é nota baixa. Emite reasoning_content.
+
+      O gratuito é promocional (setembro/2026). Quando acabar, este modelo
+      precisa de `custo_usd_por_mtok` real ou sai do roster.
