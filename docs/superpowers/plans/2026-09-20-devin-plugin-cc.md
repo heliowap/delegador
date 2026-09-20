@@ -4,7 +4,7 @@
 
 **Goal:** Um plugin de Claude Code que usa o `devin` CLI como subagente, com Jev (TypeSafe System One) como classificador barato em cinco pontos do processo, matando run condenado em minutos e entregando ao orquestrador um veredito verificado por código em vez do relatório bruto.
 
-**Architecture:** Um binário Go (`devin-companion`) com subcomandos. `plan` monta o briefing por seleção de evidência verbatim e roda os gates antes de qualquer dispatch. `task` cria worktree isolada e re-executa a si mesmo como `supervise` destacado, que roda o `devin` com `Setpgid` e faz poll do export ATIF a cada turno, cancelando o grupo de processos quando o watchdog detecta run condenado. `result` executa a verificação em código (teste, mutação, suíte, lint) e devolve o trace compactado por deleção. O Markdown de `commands/`, `agents/` e `skills/` não contém lógica: só roteia para o binário.
+**Architecture:** Um binário Go (`devin-companion`) com subcomandos. `plan` monta o briefing por seleção de evidência verbatim e roda os gates antes de qualquer dispatch. `task` cria worktree isolada e re-executa a si mesmo como `supervise` destacado, que roda o `devin` com `Setpgid` e faz poll do **stdout**, a única saída que o `devin` escreve enquanto trabalha, cancelando o grupo de processos quando o watchdog detecta run condenado. `result` executa a verificação em código (teste, mutação, suíte, lint) e devolve o trace compactado por deleção. O Markdown de `commands/`, `agents/` e `skills/` não contém lógica: só roteia para o binário.
 
 **Tech Stack:** Go 1.27+, stdlib pura (`net/http`, `encoding/json`, `os/exec`, `context`, `syscall`, `testing`). Zero dependências. Markdown com frontmatter para a superfície do plugin. `sh` para o wrapper de build.
 
@@ -514,6 +514,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -587,7 +588,12 @@ func main() {
 			emit(turn{i, "tentando de novo", []tool{{fmt.Sprintf("t%d", i), "exec", "go test ./pkg/svc/", "FAIL: cannot find module", "erro"}}})
 		}
 	case "permission-block":
+		fmt.Println("Vou inspecionar o repositorio antes de comecar.")
 		emit(turn{0, "lendo", []tool{{"t0", "read", "pkg/svc/rota.go", "func Rota() {...}", "ok"}}})
+		// A linha literal que o devin real emite ao esbarrar numa confirmacao
+		// que o modo -p nao consegue exibir. Medido contra 3000.10.31.
+		fmt.Println("warning: rejected a tool call that requires confirmation. " +
+			"Running in non-interactive mode. Use --permission-mode dangerous to auto-approve all tools.")
 		emit(turn{1, "aguardando confirmacao para rodar o teste", []tool{{"t1", "exec", "go test ./...", "aguardando confirmacao do usuario", "pendente"}}})
 		select {} // trava de proposito
 	case "out-of-scope":
@@ -596,6 +602,9 @@ func main() {
 		emit(turn{2, "editando fora do escopo", []tool{{"t2", "edit", "infra/secrets.tf", "1 hunk", "ok"}}})
 	case "no-progress":
 		for i := 0; i < 8; i++ {
+			// Volume no stdout para o watchdog ter janela que valha uma pergunta.
+			fmt.Printf("turno %d: explorando o repositorio de novo; rodei ls -la e nada mudou. %s\n",
+				i, strings.Repeat("contexto irrelevante repetido. ", 80))
 			emit(turn{i, "explorando o repositorio", []tool{{fmt.Sprintf("t%d", i), "exec", "ls -la", "total 48", "ok"}}})
 		}
 	default:
@@ -1620,6 +1629,8 @@ git commit -m "feat: fatiamento contra os tetos de 64k/32k do Jev"
 ---
 
 ### Task 6: Parser do export ATIF
+
+> **Consumidor:** o `result` e a compactação (Task 14), **não** o watchdog. Mediu-se em 2026-09-20 que `--export` só é escrito no encerramento do run — com um run em andamento e arquivos já no disco, `export.json` não existia. Para o watchdog, a fonte é o stdout (Task 12).
 
 **Files:**
 - Create: `internal/devin/atif.go`
@@ -2668,6 +2679,7 @@ A primeira fatia que gera valor de verdade: nenhuma tarefa mal formada passa daq
   - `gate.Verdict{Delegable bool; Kind string; Missing []string; Warnings []string; Effort devin.Effort; Permission string}`.
   - `gate.Check(ctx, a Asker, task, briefing string, facts RepoFacts) (Verdict, jev.Usage, error)` com `RepoFacts{BranchBase string; CitedFiles, Packages []string}`.
   - `gate.Thresholds` com defaults e `gate.DefaultThresholds()`.
+  - `devin.ListModels(ctx) ([]Model, error)` — executa `devin models list` e parseia com o `ParseModelList` da Task 3. Vive aqui, e nao na Task 10, porque quem a consome e o `plan`.
 
 - [ ] **Step 1: Escrever o teste da montagem do briefing**
 
@@ -3661,7 +3673,25 @@ Expected: FAIL — `undefined: resolveModel`.
 
 - [ ] **Step 14: Ligar a rota ao job**
 
-Crie `internal/cli/model.go`:
+Primeiro, acrescente o listador a `internal/devin/models.go` — ele consome o
+`ParseModelList` da Task 3 e e o unico ponto do projeto que executa
+`devin models list`:
+
+```go
+// acrescentar a internal/devin/models.go
+// (imports novos: "bytes", "context", "os/exec")
+
+// ListModels le a lista viva de modelos da conta.
+func ListModels(ctx context.Context) ([]Model, error) {
+	out, err := exec.CommandContext(ctx, "devin", "models", "list").Output()
+	if err != nil {
+		return nil, fmt.Errorf("devin models list: %w", err)
+	}
+	return ParseModelList(bytes.NewReader(out))
+}
+```
+
+Depois crie `internal/cli/model.go`:
 
 ```go
 // internal/cli/model.go
@@ -3790,7 +3820,6 @@ git commit -m "feat: montagem de briefing por selecao, gates e rota de modelo no
   - `devin.RunArgs{Model, Permission, PromptFile, ExportFile string}` e `(RunArgs) Flags() []string`.
   - `devin.Start(ctx, args RunArgs, dir string, stdout io.Writer) (*exec.Cmd, error)` — spawn com `Setpgid`.
   - `devin.KillGroup(pgid int, grace time.Duration) error` — `SIGTERM` no grupo, `SIGKILL` após a carência.
-  - `devin.ListModels(ctx) ([]Model, error)` — executa `devin models list` e parseia.
 
 - [ ] **Step 1: Escrever o teste da montagem de flags e do kill de grupo**
 
@@ -3957,14 +3986,6 @@ func KillGroup(pgid int, grace time.Duration) error {
 	return nil
 }
 
-// ListModels le a lista viva de modelos da conta.
-func ListModels(ctx context.Context) ([]Model, error) {
-	out, err := exec.CommandContext(ctx, "devin", "models", "list").Output()
-	if err != nil {
-		return nil, fmt.Errorf("devin models list: %w", err)
-	}
-	return ParseModelList(bytes.NewReader(out))
-}
 ```
 
 ```go
@@ -4382,9 +4403,10 @@ Nada de modelo aqui. O que dá para saber contando, se sabe contando.
 - Consumes: `devin.Turn` (Task 6).
 - Produces:
   - `watchdog.Signal{Name string; Fired bool; Probability float64; Excerpt string}`
-  - `watchdog.RepeatedFailure(turns []devin.Turn, n int) Signal` — mesmo comando com a mesma saída falhando `n` vezes.
-  - `watchdog.OutOfScope(turns []devin.Turn, allowed []string) Signal` — edição fora dos prefixos permitidos.
+  - `watchdog.RepeatedFailure(turns []devin.Turn, n int) Signal` — mesmo comando com a mesma saída falhando `n` vezes. **Pós-run apenas**, consumido pelo `result` (Task 14) para nomear o que deu errado; ao vivo, quem cobre esse caso é o `sem_progresso` do Jev, porque o stdout não traz o par chamada/resultado estruturado.
+  - `watchdog.OutOfScope(changed []string, allowed []string) Signal` — escrita fora dos prefixos permitidos. Recebe caminhos, não turnos: ao vivo eles vêm de `git status --porcelain` na worktree, que é deterministico e independe do formato da saída do `devin`.
   - `watchdog.Stalled(lastWrite time.Time, now time.Time, limit time.Duration) Signal`.
+  - `watchdog.PermissionRejected(out string) Signal` — a linha literal que o `devin` emite ao esbarrar numa confirmação impossível em modo `-p`.
 
 - [ ] **Step 1: Escrever o teste que falha**
 
@@ -4434,34 +4456,51 @@ func TestRepeatedFailureIgnoresDifferentCommands(t *testing.T) {
 	}
 }
 
-func TestOutOfScopeDetectsForbiddenEdit(t *testing.T) {
-	s := OutOfScope(turnsWith(
-		devin.ToolInteraction{Name: "edit", Input: "pkg/svc/rota.go", Status: "ok"},
-		devin.ToolInteraction{Name: "edit", Input: "infra/deploy.yaml", Status: "ok"},
-	), []string{"pkg/svc/"})
-
+// A entrada vem de `git status --porcelain`, entao so arquivo efetivamente
+// alterado aparece: leitura fora do escopo nunca chega aqui, e e legitima.
+func TestOutOfScopeDetectsForbiddenWrite(t *testing.T) {
+	s := OutOfScope([]string{"pkg/svc/rota.go", "infra/deploy.yaml"}, []string{"pkg/svc/"})
 	if !s.Fired {
-		t.Fatal("edicao em infra/ deveria disparar")
+		t.Fatal("escrita em infra/ deveria disparar")
 	}
-	if s.Excerpt == "" || !contains(s.Excerpt, "infra/deploy.yaml") {
+	if !contains(s.Excerpt, "infra/deploy.yaml") {
 		t.Errorf("Excerpt = %q, quero nomear o arquivo", s.Excerpt)
 	}
 }
 
-// Leitura fora do escopo e legitima: so escrita conta.
-func TestOutOfScopeIgnoresReads(t *testing.T) {
-	s := OutOfScope(turnsWith(
-		devin.ToolInteraction{Name: "read", Input: "infra/deploy.yaml", Status: "ok"},
-	), []string{"pkg/svc/"})
-	if s.Fired {
-		t.Error("leitura fora do escopo nao deveria disparar")
+func TestOutOfScopeQuietWhenAllInside(t *testing.T) {
+	if OutOfScope([]string{"pkg/svc/rota.go", "pkg/svc/rota_test.go"}, []string{"pkg/svc/"}).Fired {
+		t.Error("tudo dentro do escopo nao deveria disparar")
 	}
 }
 
 func TestOutOfScopeWithNoAllowListNeverFires(t *testing.T) {
-	s := OutOfScope(turnsWith(devin.ToolInteraction{Name: "edit", Input: "qualquer.go"}), nil)
-	if s.Fired {
+	if OutOfScope([]string{"qualquer.go"}, nil).Fired {
 		t.Error("sem lista de escopo declarada, o sinal fica desligado")
+	}
+}
+
+// Medido contra devin 3000.10.31: ao esbarrar numa confirmacao que o modo -p
+// nao consegue exibir, ele emite esta linha e encerra. Isso e string estavel,
+// nao julgamento — nao tem por que custar uma chamada de modelo.
+func TestPermissionRejectedDetectsLiteralWarning(t *testing.T) {
+	out := "Vou inspecionar o repositorio.\nwarning: rejected a tool call that requires confirmation. " +
+		"Running in non-interactive mode. Use --permission-mode dangerous to auto-approve all tools.\n"
+	s := PermissionRejected(out)
+	if !s.Fired {
+		t.Fatal("a recusa de ferramenta deveria disparar")
+	}
+	if s.Probability != 1 {
+		t.Errorf("Probability = %v; sinal deterministico vale 1", s.Probability)
+	}
+	if s.Excerpt == "" {
+		t.Error("o sinal precisa carregar a linha que o provocou")
+	}
+}
+
+func TestPermissionRejectedQuietOnNormalOutput(t *testing.T) {
+	if PermissionRejected("rodando go test ./...\nok  pkg/svc  0.4s\n").Fired {
+		t.Error("saida normal nao deveria disparar")
 	}
 }
 
@@ -4517,9 +4556,6 @@ type Signal struct {
 	Excerpt     string
 }
 
-// writeTools sao as ferramentas que alteram o repositorio.
-var writeTools = map[string]bool{"edit": true, "write": true, "patch": true}
-
 // RepeatedFailure dispara quando o mesmo comando falha n vezes com a mesma
 // saida. Comando diferente, ou saida diferente, significa que ele mudou de
 // abordagem — isso e progresso, nao repeticao.
@@ -4544,29 +4580,51 @@ func RepeatedFailure(turns []devin.Turn, n int) Signal {
 	return Signal{Name: "comando_repetido"}
 }
 
-// OutOfScope dispara quando uma escrita sai dos prefixos permitidos. Sem
-// lista declarada o sinal fica desligado: nao se inventa escopo.
-func OutOfScope(turns []devin.Turn, allowed []string) Signal {
+// OutOfScope dispara quando um arquivo alterado sai dos prefixos permitidos.
+// Recebe caminhos de `git status --porcelain`, nao turnos: assim o sinal nao
+// depende do formato da saida do devin. Sem lista declarada fica desligado —
+// nao se inventa escopo.
+func OutOfScope(changed []string, allowed []string) Signal {
 	if len(allowed) == 0 {
 		return Signal{Name: "fora_do_escopo"}
 	}
-	for _, t := range turns {
-		for _, tool := range t.Tools {
-			if !writeTools[tool.Name] {
-				continue
-			}
-			if !hasAnyPrefix(tool.Input, allowed) {
-				return Signal{
-					Name: "fora_do_escopo", Fired: true, Probability: 1,
-					Excerpt: fmt.Sprintf("%s escreveu em %s, fora de %v", tool.Name, tool.Input, allowed),
-				}
+	for _, path := range changed {
+		if !hasAnyPrefix(path, allowed) {
+			return Signal{
+				Name: "fora_do_escopo", Fired: true, Probability: 1,
+				Excerpt: fmt.Sprintf("%s foi alterado, fora de %v", path, allowed),
 			}
 		}
 	}
 	return Signal{Name: "fora_do_escopo"}
 }
 
-// Stalled dispara quando o export para de crescer por tempo demais.
+// rejectionMarker e a linha que o devin emite ao esbarrar numa confirmacao
+// que o modo -p nao consegue exibir. Medido contra devin 3000.10.31.
+const rejectionMarker = "rejected a tool call that requires confirmation"
+
+// PermissionRejected dispara na presenca dessa linha. E terminal por
+// natureza: o processo nao se recupera de uma confirmacao que ninguem pode dar.
+func PermissionRejected(out string) Signal {
+	i := strings.Index(out, rejectionMarker)
+	if i < 0 {
+		return Signal{Name: "bloqueio_de_permissao"}
+	}
+	end := i + len(rejectionMarker) + 120
+	if end > len(out) {
+		end = len(out)
+	}
+	start := i - 120
+	if start < 0 {
+		start = 0
+	}
+	return Signal{
+		Name: "bloqueio_de_permissao", Fired: true, Probability: 1,
+		Excerpt: out[start:end],
+	}
+}
+
+// Stalled dispara quando o stdout para de crescer por tempo demais.
 func Stalled(lastWrite, now time.Time, limit time.Duration) Signal {
 	idle := now.Sub(lastWrite)
 	if idle < limit {
@@ -4618,12 +4676,14 @@ Aqui o tempo começa a ser economizado de verdade.
 - Create: `internal/watchdog/policy.go`
 - Test: `internal/watchdog/policy_test.go`, `internal/watchdog/watchdog_test.go`
 
+> **Correção medida em 2026-09-20.** O spec original mandava o watchdog fazer poll de `export.json` "a cada turno", seguindo a documentação do Devin. Isso é falso: com um run em andamento e arquivos já escritos, `export.json` não existia, enquanto `stdout.log` crescia. O watchdog lê **stdout**, incrementalmente, por janelas de texto. `export.json` continua servindo à Task 14, onde já está completo.
+
 **Interfaces:**
-- Consumes: `devin.ParseATIF`, `devin.KillGroup`, `job.Job`/`CancelReason`, `jev.WatchdogQuestions`, `gate.Asker`.
+- Consumes: `devin.KillGroup`, `job.Job`/`CancelReason`, `jev.WatchdogQuestions`, `gate.Asker`.
 - Produces:
-  - `watchdog.Config{PollInterval, StallLimit time.Duration; RepeatThreshold int; AllowedPaths []string; NoProgress, PermissionBlock float64; ConsecutiveTurns int}` e `watchdog.DefaultConfig()`.
+  - `watchdog.Config{PollInterval, StallLimit time.Duration; RepeatThreshold int; AllowedPaths []string; NoProgress float64; ConsecutiveTurns int; WindowBytes int}` e `watchdog.DefaultConfig()`.
   - `watchdog.NewPolicy(cfg Config) *Policy` e `(*Policy) Observe(sigs []Signal) *Signal` — devolve o sinal que autoriza cancelar, ou `nil`.
-  - `watchdog.Watch(ctx context.Context, j *job.Job, a gate.Asker, cfg Config)`.
+  - `watchdog.Watch(ctx context.Context, j *job.Job, a gate.Asker, cfg Config)` — lê `<job>/stdout.log`.
 
 - [ ] **Step 1: Escrever o teste da política**
 
@@ -4666,7 +4726,7 @@ func TestPolicyResetsWhenSignalClears(t *testing.T) {
 
 // Bloqueio de permissao e terminal por natureza: esperar o segundo turno
 // seria esperar por algo que nunca vem.
-func TestPolicyCancelsImmediatelyOnPermissionBlock(t *testing.T) {
+func TestPolicyCancelsImmediatelyOnToolRejection(t *testing.T) {
 	p := NewPolicy(DefaultConfig())
 	got := p.Observe([]Signal{fired("bloqueio_de_permissao")})
 	if got == nil {
@@ -4704,8 +4764,8 @@ type Config struct {
 	RepeatThreshold  int
 	AllowedPaths     []string
 	NoProgress       float64
-	PermissionBlock  float64
 	ConsecutiveTurns int
+	WindowBytes      int // quanto de stdout novo vira uma janela de julgamento
 }
 
 // DefaultConfig traz os valores de partida, a recalibrar com uso real.
@@ -4715,8 +4775,8 @@ func DefaultConfig() Config {
 		StallLimit:       8 * time.Minute,
 		RepeatThreshold:  3,
 		NoProgress:       0.70,
-		PermissionBlock:  0.90,
 		ConsecutiveTurns: 2,
+		WindowBytes:      16 * 1024,
 	}
 }
 
@@ -4740,14 +4800,11 @@ func NewPolicy(cfg Config) *Policy {
 }
 
 func (p *Policy) threshold(name string) float64 {
-	switch name {
-	case "bloqueio_de_permissao":
-		return p.cfg.PermissionBlock
-	case "sem_progresso":
+	if name == "sem_progresso" {
 		return p.cfg.NoProgress
-	default:
-		return 0.5 // sinais deterministicos chegam com probabilidade 1
 	}
+	// Os demais sao deterministicos e chegam com probabilidade 1.
+	return 0.5
 }
 
 // Observe processa os sinais de um turno e devolve o que autoriza cancelar.
@@ -4790,6 +4847,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -4811,45 +4869,40 @@ func (s stubAsker) Ask(_ context.Context, _ any, qs map[string]jev.Question) (je
 
 // O teste completo de cancelamento (que sobe o fakedevin, deixa o watchdog
 // matar o processo e confere cancel-reason.json) vive em internal/cli, onde
-// o supervisor existe. Aqui se confere o laco de leitura do export.
-func TestWatchReadsGrowingExportAndRecordsSignals(t *testing.T) {
-	dir := t.TempDir()
-	export := dir + "/export.json"
-
-	writeTurns := func(n int) {
-		type tool struct {
-			ID, Name, Input, Output, Status string
-		}
-		type turn struct {
-			Index int    `json:"index"`
-			Text  string `json:"text"`
-			Tools []tool `json:"tools"`
-		}
-		var ts []turn
-		for i := 0; i < n; i++ {
-			ts = append(ts, turn{i, "explorando", []tool{{"t", "exec", "ls", "total 4", "ok"}}})
-		}
-		raw, _ := json.Marshal(map[string]any{"turns": ts})
-		tmp := export + ".tmp"
-		_ = os.WriteFile(tmp, raw, 0o644)
-		_ = os.Rename(tmp, export)
+// o supervisor existe. Aqui se confere o laco de leitura incremental do
+// stdout — a fonte viva, medida em 2026-09-20.
+func appendTo(t *testing.T, path, text string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		t.Fatal(err)
 	}
+	defer f.Close()
+	if _, err := f.WriteString(text); err != nil {
+		t.Fatal(err)
+	}
+}
 
-	writeTurns(1)
+func noPaths() []string { return nil }
+
+func TestLoopReadsGrowingStdoutAndAsksJev(t *testing.T) {
+	logPath := t.TempDir() + "/stdout.log"
 
 	cfg := DefaultConfig()
 	cfg.PollInterval = 20 * time.Millisecond
+	cfg.WindowBytes = 200
 
 	seen := make(chan *Signal, 4)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	go loop(ctx, export, stubAsker{noProgress: 0.95}, cfg, func(s *Signal) {
-		seen <- s
-	})
+	go loop(ctx, logPath, noPaths, stubAsker{noProgress: 0.95}, cfg, func(s *Signal) { seen <- s })
 
-	time.Sleep(60 * time.Millisecond)
-	writeTurns(2)
+	// Duas janelas cheias: a politica exige duas consecutivas para sem_progresso.
+	for i := 0; i < 4; i++ {
+		appendTo(t, logPath, strings.Repeat("explorando de novo, nada novo. ", 10)+"\n")
+		time.Sleep(40 * time.Millisecond)
+	}
 
 	select {
 	case s := <-seen:
@@ -4857,7 +4910,37 @@ func TestWatchReadsGrowingExportAndRecordsSignals(t *testing.T) {
 			t.Errorf("sinal = %q, quero sem_progresso", s.Name)
 		}
 	case <-ctx.Done():
-		t.Fatal("o watchdog nao detectou sem_progresso em dois turnos")
+		t.Fatal("o watchdog nao detectou sem_progresso em duas janelas")
+	}
+}
+
+// A recusa de ferramenta nao espera janela cheia nem segunda ocorrencia:
+// ela e terminal, e esperar seria esperar por algo que nunca vem.
+func TestLoopCancelsImmediatelyOnRejectionInStdout(t *testing.T) {
+	logPath := t.TempDir() + "/stdout.log"
+
+	cfg := DefaultConfig()
+	cfg.PollInterval = 20 * time.Millisecond
+
+	seen := make(chan *Signal, 2)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// Asker nil: este caminho nao pode depender de rede nem de chave.
+	go loop(ctx, logPath, noPaths, nil, cfg, func(s *Signal) { seen <- s })
+
+	appendTo(t, logPath, "Vou inspecionar o repositorio.\n")
+	time.Sleep(40 * time.Millisecond)
+	appendTo(t, logPath, "warning: rejected a tool call that requires confirmation. "+
+		"Running in non-interactive mode.\n")
+
+	select {
+	case s := <-seen:
+		if s.Name != "bloqueio_de_permissao" {
+			t.Errorf("sinal = %q, quero bloqueio_de_permissao", s.Name)
+		}
+	case <-ctx.Done():
+		t.Fatal("a recusa no stdout nao foi detectada")
 	}
 }
 ```
@@ -4877,7 +4960,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/heliowap/devin-plugin-cc/internal/devin"
@@ -4890,14 +4976,20 @@ type asker interface {
 	Ask(ctx context.Context, state any, qs map[string]jev.Question) (jev.Result, error)
 }
 
-// loop observa o export e chama onCancel quando a politica autoriza. Separado
-// de Watch para poder ser testado sem job, sem processo e sem rede.
-func loop(ctx context.Context, exportPath string, a asker, cfg Config, onCancel func(*Signal)) {
+// loop observa o stdout do devin e chama onCancel quando a politica autoriza.
+// Le incrementalmente: cada passada pega so o que chegou desde a anterior.
+// Separado de Watch para ser testavel sem job, sem processo e sem rede.
+//
+// A fonte e stdout, nao o export: mediu-se em 2026-09-20 que --export so e
+// escrito no encerramento, enquanto o stdout cresce durante o trabalho.
+func loop(ctx context.Context, logPath string, changedPaths func() []string, a asker, cfg Config, onCancel func(*Signal)) {
 	policy := NewPolicy(cfg)
 	ticker := time.NewTicker(cfg.PollInterval)
 	defer ticker.Stop()
 
-	seen := 0
+	var offset int64
+	var pending string
+	var prevWindow string
 	lastGrowth := time.Now()
 
 	for {
@@ -4907,31 +4999,43 @@ func loop(ctx context.Context, exportPath string, a asker, cfg Config, onCancel 
 		case <-ticker.C:
 		}
 
-		raw, err := os.ReadFile(exportPath)
+		chunk, next, err := readSince(logPath, offset)
 		if err != nil {
-			continue // ainda nao escrito, ou no meio do rename atomico
+			continue // ainda nao criado
 		}
-		turns, err := devin.ParseATIF(raw)
-		if err != nil || len(turns) <= seen {
-			// Parser quebrado degrada para "sem watchdog"; nao derruba o job.
-			if len(turns) <= seen {
-				if s := Stalled(lastGrowth, time.Now(), cfg.StallLimit); s.Fired {
-					if fire := policy.Observe([]Signal{s}); fire != nil {
-						onCancel(fire)
-						return
-					}
+
+		if next == offset {
+			// Nada novo. O unico sinal possivel e estar parado tempo demais.
+			if s := Stalled(lastGrowth, time.Now(), cfg.StallLimit); s.Fired {
+				if fire := policy.Observe([]Signal{s}); fire != nil {
+					onCancel(fire)
+					return
 				}
 			}
 			continue
 		}
-		seen = len(turns)
+		offset = next
 		lastGrowth = time.Now()
+		pending += chunk
 
-		sigs := []Signal{
-			RepeatedFailure(turns, cfg.RepeatThreshold),
-			OutOfScope(turns, cfg.AllowedPaths),
+		// A recusa de ferramenta e terminal e barata de achar: nao espera
+		// completar janela.
+		if s := PermissionRejected(pending); s.Fired {
+			if fire := policy.Observe([]Signal{s}); fire != nil {
+				onCancel(fire)
+				return
+			}
 		}
-		sigs = append(sigs, jevSignals(ctx, a, turns)...)
+
+		if len(pending) < cfg.WindowBytes {
+			continue // acumula ate ter uma janela que valha uma pergunta
+		}
+		window := pending
+		pending = ""
+
+		sigs := []Signal{OutOfScope(changedPaths(), cfg.AllowedPaths)}
+		sigs = append(sigs, jevSignals(ctx, a, window, prevWindow)...)
+		prevWindow = window
 
 		if fire := policy.Observe(sigs); fire != nil {
 			onCancel(fire)
@@ -4940,25 +5044,46 @@ func loop(ctx context.Context, exportPath string, a asker, cfg Config, onCancel 
 	}
 }
 
-// jevSignals pergunta ao Jev apenas o que exige leitura semantica.
-func jevSignals(ctx context.Context, a asker, turns []devin.Turn) []Signal {
-	if a == nil || len(turns) == 0 {
+// readSince le o que foi acrescentado ao arquivo depois de offset.
+func readSince(path string, offset int64) (string, int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", offset, err
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return "", offset, err
+	}
+	if info.Size() <= offset {
+		return "", offset, nil
+	}
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return "", offset, err
+	}
+	buf := make([]byte, info.Size()-offset)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && err != io.ErrUnexpectedEOF {
+		return "", offset, err
+	}
+	return string(buf[:n]), offset + int64(n), nil
+}
+
+// jevSignals pergunta ao Jev apenas o que exige leitura semantica. Hoje isso
+// e uma pergunta so: bloqueio_de_permissao saiu daqui quando se mediu que o
+// devin o anuncia numa string estavel.
+func jevSignals(ctx context.Context, a asker, window, prev string) []Signal {
+	if a == nil || window == "" {
 		return nil
 	}
-	current := turns[len(turns)-1]
-
-	var prev string
-	for i := max(0, len(turns)-4); i < len(turns)-1; i++ {
-		prev += turns[i].Summary()
-	}
-
 	budget, err := jev.StateBudget(jev.WatchdogQuestions(), jev.DefaultLimits())
 	if err != nil {
 		return nil
 	}
 	state := map[string]any{
 		"janela": map[string]any{
-			"turno_atual":    fitTo(current.Summary(), budget/2),
+			"turno_atual":    fitTo(window, budget/2),
 			"turnos_previos": fitTo(prev, budget/2),
 		},
 	}
@@ -4967,19 +5092,14 @@ func jevSignals(ctx context.Context, a asker, turns []devin.Turn) []Signal {
 	if err != nil {
 		return nil // falha de rede nao cancela job
 	}
-
-	var out []Signal
-	for _, name := range []string{"sem_progresso", "bloqueio_de_permissao"} {
-		p, ok := res.Answers.NoulOf(name)
-		if !ok {
-			continue
-		}
-		out = append(out, Signal{
-			Name: name, Fired: true, Probability: p,
-			Excerpt: truncate(current.Summary(), 400),
-		})
+	p, ok := res.Answers.NoulOf("sem_progresso")
+	if !ok {
+		return nil
 	}
-	return out
+	return []Signal{{
+		Name: "sem_progresso", Fired: true, Probability: p,
+		Excerpt: truncate(window, 400),
+	}}
 }
 
 // fitTo corta pelo fim, preservando o inicio do texto.
@@ -4991,16 +5111,26 @@ func fitTo(s string, budgetTokens int) string {
 	return s[:maxChars]
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
+
+// changedIn lista os arquivos alterados na worktree, via git. Deterministico
+// e independente do formato da saida do devin.
+func changedIn(dir string) []string {
+	out, err := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	if err != nil {
+		return nil
 	}
-	return b
+	var paths []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if len(line) > 3 {
+			paths = append(paths, strings.TrimSpace(line[3:]))
+		}
+	}
+	return paths
 }
 
 // Watch observa o job e cancela o grupo de processos quando a politica manda.
 func Watch(ctx context.Context, j *job.Job, a asker, cfg Config) {
-	loop(ctx, j.Path("export.json"), a, cfg, func(s *Signal) {
+	loop(ctx, j.Path("stdout.log"), func() []string { return changedIn(j.Worktree) }, a, cfg, func(s *Signal) {
 		reason := job.CancelReason{
 			Signal:      s.Name,
 			Probability: s.Probability,

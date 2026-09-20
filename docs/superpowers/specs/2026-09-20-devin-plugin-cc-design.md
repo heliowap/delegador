@@ -107,13 +107,15 @@ A worktree nova não tem ambiente. O briefing carrega os caminhos absolutos que 
 
 ### 5.3 `supervise` — watchdog
 
-Poll de `<job>/export.json`, que o Devin grava **a cada turno** em formato ATIF. Turno novo vira janela respeitando o teto do Jev (64k por requisição; 32k para state mais a maior pergunta), com sobreposição suficiente para não partir um par chamada/resultado.
+Poll de `<job>/stdout.log`, que o Devin escreve **incrementalmente enquanto trabalha**. Cada leitura pega só o que chegou desde a anterior e vira janela respeitando o teto do Jev (64k por requisição; 32k para state mais a maior pergunta).
 
-Determinístico, em código, sem modelo: comando idêntico repetido com a mesma saída, arquivo tocado fora do escopo declarado (via `git status` na worktree), processo sem escrita há N minutos.
+> **Medido em 2026-09-20, contra `devin` 3000.10.31.** A documentação do Devin afirma que `--export` grava após cada turno, e o protocolo de referência afirma o contrário sobre o stdout. **As duas afirmações estão trocadas.** Com um run em andamento e arquivos já escritos no disco, `export.json` não existia, enquanto `stdout.log` crescia de 567 para 792 bytes. O `--export` é escrito no encerramento; o stdout é a única fonte viva. O watchdog lê stdout; o `export.json` continua servindo à compactação pós-run (§5.5), onde já está completo.
 
-Semântico, via Jev (§6.3): `sem_progresso` e `bloqueio_de_permissao`.
+Determinístico, em código, sem modelo: a linha literal `rejected a tool call that requires confirmation`, que o `devin` emite ao esbarrar numa confirmação que o modo `-p` não consegue exibir; comando idêntico repetido com a mesma saída; arquivo tocado fora do escopo declarado (via `git status` na worktree); processo sem escrita há N minutos.
 
-Política, configurável: cancela quando um sinal cruza o limiar em **dois turnos consecutivos**; exceção, `bloqueio_de_permissao ≥ 0.9` cancela no primeiro, por ser terminal por natureza. Ao cancelar, grava `cancel-reason.json` com o sinal, a probabilidade, o **trecho verbatim do turno** que o provocou e o comando de retomada pronto para colar, e manda `SIGTERM` ao grupo, `SIGKILL` após 10s.
+Semântico, via Jev (§6.3): `sem_progresso`, e só ele. `bloqueio_de_permissao` saiu do Jev quando se mediu que o `devin` anuncia a recusa numa string estável — o que dá para saber contando não vai para o modelo.
+
+Política, configurável: cancela quando um sinal cruza o limiar em **duas janelas consecutivas**; exceção, a recusa de ferramenta cancela na primeira, por ser terminal por natureza — o processo não vai se recuperar de uma confirmação que ninguém pode dar. Ao cancelar, grava `cancel-reason.json` com o sinal, a probabilidade, o **trecho verbatim do turno** que o provocou e o comando de retomada pronto para colar, e manda `SIGTERM` ao grupo, `SIGKILL` após 10s.
 
 O aviso chega por três caminhos, do mais confiável ao mais conveniente: `status` e `result` abrem com o bloco de cancelamento; um hook `PostToolUse` do plugin detecta job cancelado desde a última chamada e injeta o motivo no contexto do Claude, para o orquestrador reagir sem ser perguntado; e, quando `notify.osascript` estiver ligado na configuração, uma notificação de sistema no macOS. Os dois primeiros são obrigatórios, o terceiro é opcional e desligado por padrão.
 
@@ -167,7 +169,9 @@ Política: qualquer um abaixo do limiar reprova, e o nome do item volta em `falt
 
 State: janela do export ATIF com os turnos recentes.
 
-Nouls: `sem_progresso` (o turno acrescenta informação que os anteriores não tinham?) e `bloqueio_de_permissao` (o agente está parado esperando uma confirmação que não virá em modo não interativo?).
+Noul: `sem_progresso` (a janela acrescenta informação que as anteriores não tinham?).
+
+`bloqueio_de_permissao` **não é pergunta de Jev**. O `devin` emite `rejected a tool call that requires confirmation` quando isso acontece; um grep resolve, de graça e sem erro de calibragem.
 
 ### 6.4 Rota
 
@@ -246,7 +250,8 @@ CI: `go vet`, `staticcheck`, `go test ./...` sem os evals.
 | Risco | Mitigação |
 | --- | --- |
 | Watchdog mata run saudável | Exige dois turnos consecutivos; `cancel-reason.json` traz o trecho verbatim; `devin -c` retoma sem perder contexto |
-| Formato do ATIF muda | Parser tolerante, fixtures em `testdata/`, falha do parser degrada para "sem watchdog", não derruba o job |
+| Formato do ATIF muda | Parser tolerante, fixtures em `testdata/`, falha do parser degrada para compactação desligada, não derruba o job |
+| Formato do stdout muda, ou ele deixa de ser incremental | O watchdog perde a fonte viva. `doctor` mede isso: dispara um run trivial e confere que o stdout cresce antes do encerramento; se não crescer, avisa que o watchdog está cego |
 | Jev descalibrado neste domínio | `evals/` com fixtures rotuladas; limiares em configuração; auditoria em `jev.jsonl` permite recalibrar com dados reais |
 | Flags do `devin` mudam entre versões | `doctor` confere `devin --version` e a presença das flags usadas antes do primeiro dispatch |
 | Compactação apaga o que importa | Só deleta, nunca reescreve; o export bruto fica em disco e `result --raw` mostra tudo |
