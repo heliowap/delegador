@@ -94,16 +94,19 @@ func Run(ctx context.Context, c *llm.Client, reg *tools.Registry, cfg Config, pr
 		out.Usage.CompletionTokens += resp.Usage.CompletionTokens
 		out.Final = resp.Message.Content
 
+		// Resposta final encerra o laço antes da pré-condição: ela existe
+		// para decidir se há próximo turno — sem turno seguinte não há o
+		// que vetar, e a pergunta ao Jev seria gasta à toa.
+		if len(resp.Message.ToolCalls) == 0 {
+			out.Stop = "final"
+			return out, nil
+		}
 		if pre != nil {
 			if v := pre(out.Turns); v != nil {
 				out.Stop = "veto"
 				out.Veto = v
 				return out, nil
 			}
-		}
-		if len(resp.Message.ToolCalls) == 0 {
-			out.Stop = "final"
-			return out, nil
 		}
 		if len(out.Turns) >= cfg.MaxTurns {
 			out.Stop = "teto_de_turnos"
