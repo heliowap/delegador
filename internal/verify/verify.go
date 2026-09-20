@@ -123,6 +123,9 @@ func Run(ctx context.Context, dir string, cfg Config) (Report, error) {
 	if mut, err := mutation(ctx, dir, cfg); err == nil {
 		rep.Steps = append(rep.Steps, mut)
 		// A mutacao prova algo quando o teste FALHA sem a correcao.
+		// Limitacao herdada do v1: uma falha de infra (timeout, ambiente
+		// quebrado) tambem sai ExitCode!=0 e conta como "provou" — nao da
+		// para distinguir teste-vermelho de nao-conseguiu-rodar.
 		rep.MutationProved = !mut.Skipped && mut.ExitCode != 0
 	} else {
 		rep.Steps = append(rep.Steps, Step{Name: "mutacao", Skipped: true,
@@ -148,6 +151,9 @@ func mutation(ctx context.Context, dir string, cfg Config) (Step, error) {
 	defer os.RemoveAll(copyDir)
 
 	target := filepath.Join(copyDir, "wt")
+	// Numa linked worktree o `.git` copiado e um arquivo que resolve a copia
+	// como raiz da propria worktree: o revert fica na copia (verificado),
+	// mas o gitdir/index e compartilhado com o original — efeito cosmetico.
 	if out, err := exec.CommandContext(ctx, "cp", "-R", dir, target).CombinedOutput(); err != nil {
 		return Step{}, fmt.Errorf("copiando worktree: %w: %s", err, out)
 	}

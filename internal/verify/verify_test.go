@@ -79,6 +79,9 @@ func TestRunFlagsTestThatProvesNothing(t *testing.T) {
 	if rep.MutationProved {
 		t.Error("o teste passa sem a correcao; a mutacao NAO deveria provar nada")
 	}
+	if rep.Green() {
+		t.Error("mutacao que nao prova nada nao pode sair verde")
+	}
 }
 
 func TestRunSkipsStepsWithoutCommand(t *testing.T) {

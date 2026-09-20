@@ -46,8 +46,11 @@ func StartFakeJev(t *testing.T, overrides map[string]float64) string {
 		for id, q := range req.Questions {
 			switch q["type"] {
 			case "choice":
-				choice := choices[id]
-				if choice == "" {
+				choice, ok := choices[id]
+				if !ok {
+					// Pergunta nova sem resposta roteirizada: falhar alto
+					// evita que um default mudo aprove o que nao foi testado.
+					t.Errorf("fakejev: choice sem default: %q", id)
 					choice = "correcao_com_teste"
 				}
 				answers[id] = map[string]any{"type": "choice", "choice": choice, "confidence": 0.9,
@@ -55,7 +58,11 @@ func StartFakeJev(t *testing.T, overrides map[string]float64) string {
 			case "score":
 				answers[id] = map[string]any{"type": "score", "score": 1.2, "confidence": 0.8}
 			default: // noul e qualquer pergunta sem tipo
-				answers[id] = map[string]any{"type": "noul", "noul": healthy[id]}
+				p, ok := healthy[id]
+				if !ok {
+					t.Errorf("fakejev: noul sem default: %q", id)
+				}
+				answers[id] = map[string]any{"type": "noul", "noul": p}
 			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{

@@ -25,6 +25,10 @@ const ExitRejected = 3
 // convencao dos testes do roster. Quem remede e o `doctor --probe`.
 const sondagemMaxIdade = 30 * 24 * time.Hour
 
+// defaultTestGlobs e o conjunto que o v1 usava inline no subcomando result:
+// cobre go, pytest e os padroes de teste de JS/TS.
+var defaultTestGlobs = []string{"*_test.go", "test_*.py", "*.test.ts", "*.spec.ts"}
+
 type planOutput struct {
 	gate.Verdict
 	JobID       string  `json:"job_id"`
@@ -62,8 +66,16 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		rosterF  = fs.String("roster", "", "caminho do roster.yaml (padrao: o do modulo delegador)")
 		asJSON   = fs.Bool("json", false, "saida em JSON")
 	)
+	var testGlobs []string
+	fs.Func("test-glob", "glob de arquivo de teste para a sonda de mutacao (repetivel)", func(s string) error {
+		testGlobs = append(testGlobs, s)
+		return nil
+	})
 	if err := fs.Parse(args); err != nil {
 		return ExitUsage
+	}
+	if len(testGlobs) == 0 {
+		testGlobs = defaultTestGlobs
 	}
 	if *task == "" || *worktree == "" {
 		fmt.Fprintln(stderr, "plan: --task e --worktree sao obrigatorios")
@@ -104,6 +116,7 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	kept, usage, err := gate.SelectEvidence(ctx, client, *task, items)
 	if err != nil {
 		fmt.Fprintf(stderr, "plan: %v\n", err)
+		_ = job.Release(j.ID)
 		return 1
 	}
 	_ = ledger.Record("selecao_evidencia", usage)
@@ -114,12 +127,14 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	})
 	if err := os.WriteFile(j.Path("briefing.md"), []byte(briefing), 0o644); err != nil {
 		fmt.Fprintf(stderr, "plan: gravando briefing: %v\n", err)
+		_ = job.Release(j.ID)
 		return 1
 	}
 
 	verdict, usage, err := gate.Check(ctx, client, *task, briefing, gate.RepoFacts{})
 	if err != nil {
 		fmt.Fprintf(stderr, "plan: %v\n", err)
+		_ = job.Release(j.ID)
 		return 1
 	}
 	_ = ledger.Record("gates", usage)
@@ -183,8 +198,16 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		// e os comandos sao os declarados no briefing.
 		j.WritePrefixes = []string{""}
 		j.AllowCommands = nonEmpty(*testCmd, *suiteCmd, *lintCmd)
+		// O verify.Config do run sai daqui tambem: os papeis dos comandos e
+		// os globs de teste da sonda de mutacao.
+		j.TestCmd, j.SuiteCmd, j.LintCmd = *testCmd, *suiteCmd, *lintCmd
+		j.TestGlobs = testGlobs
+		// O registro da rota: a cascata eleva o corte sem repreguntar ao Jev.
+		j.Percentil, j.Dimensao = escolha.Percentil, string(escolha.Dimensao)
+		j.Autocontida = verdict.Autocontida
 		if err := j.Save(); err != nil {
 			fmt.Fprintf(stderr, "plan: %v\n", err)
+			_ = job.Release(j.ID)
 			return 1
 		}
 	}

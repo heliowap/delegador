@@ -47,13 +47,28 @@ type Job struct {
 	// O que o run precisa para remontar o tools.Policy do job: a escrita vai
 	// para os prefixos declarados e a allowlist de comando vem dos comandos
 	// do briefing. Worktree ja esta no campo acima.
-	WritePrefixes []string      `json:"write_prefixes"`
-	AllowCommands []string      `json:"allow_commands"`
-	PID           int           `json:"pid"`
-	PGID          int           `json:"pgid"`
-	CreatedAt     time.Time     `json:"created_at"`
-	UpdatedAt     time.Time     `json:"updated_at"`
-	CancelReason  *CancelReason `json:"cancel_reason,omitempty"`
+	WritePrefixes []string `json:"write_prefixes"`
+	AllowCommands []string `json:"allow_commands"`
+
+	// O que o run precisa para montar o verify.Config sem repedir flags:
+	// os papeis dos comandos (qual e o teste, qual a suite, qual o lint) e
+	// os globs que classificam arquivo de teste na sonda de mutacao.
+	TestCmd   string   `json:"test_cmd"`
+	SuiteCmd  string   `json:"suite_cmd"`
+	LintCmd   string   `json:"lint_cmd"`
+	TestGlobs []string `json:"test_globs"`
+
+	// O registro da rota: a cascata re-roteia a partir de Percentil sem
+	// repreguntar ao Jev, e o relatorio explica a escolha sem refazer a conta.
+	Percentil   float64 `json:"percentil"`
+	Dimensao    string  `json:"dimensao"`
+	Autocontida float64 `json:"autocontida"`
+
+	PID          int           `json:"pid"`
+	PGID         int           `json:"pgid"`
+	CreatedAt    time.Time     `json:"created_at"`
+	UpdatedAt    time.Time     `json:"updated_at"`
+	CancelReason *CancelReason `json:"cancel_reason,omitempty"`
 
 	dir string
 }

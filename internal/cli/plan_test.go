@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -134,5 +135,25 @@ func TestPlanDelegableRoutesAndPersistsPolicy(t *testing.T) {
 	}
 	if len(j.WritePrefixes) != 1 || j.WritePrefixes[0] != "" {
 		t.Errorf("WritePrefixes = %v, quero a worktree inteira", j.WritePrefixes)
+	}
+
+	// O verify.Config do run sai do job, nao de flags repetidas.
+	if j.TestCmd != "go test ./..." || j.SuiteCmd != "" || j.LintCmd != "" {
+		t.Errorf("comandos persistidos = %q %q %q", j.TestCmd, j.SuiteCmd, j.LintCmd)
+	}
+	if !slices.Equal(j.TestGlobs, defaultTestGlobs) {
+		t.Errorf("TestGlobs = %v, quero o default %v", j.TestGlobs, defaultTestGlobs)
+	}
+
+	// O registro da rota: a cascata re-roteia sem repreguntar ao Jev.
+	score, niveis := 1.2, 3.0 // complexidade tem 4 criterios; o fake devolve 1.2
+	if want := score / niveis; j.Percentil != want {
+		t.Errorf("Percentil = %v, quero %v", j.Percentil, want)
+	}
+	if j.Dimensao != "mecanica" {
+		t.Errorf("Dimensao = %q, quero mecanica (default do fake)", j.Dimensao)
+	}
+	if j.Autocontida != 0.9 {
+		t.Errorf("Autocontida = %v, quero 0.9 (default do fake)", j.Autocontida)
 	}
 }
