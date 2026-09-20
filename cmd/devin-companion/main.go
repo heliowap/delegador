@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/heliowap/devin-plugin-cc/internal/cli"
+	"github.com/heliowap/delegador/internal/cli"
 )
 
 func main() {

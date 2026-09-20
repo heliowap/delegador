@@ -1,3 +1,3 @@
-module github.com/heliowap/devin-plugin-cc
+module github.com/heliowap/delegador
 
 go 1.27
