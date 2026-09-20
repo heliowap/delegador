@@ -69,10 +69,10 @@ func Avaliar(out agent.Outcome, rep verify.Report, tentativa int, cfg Config) De
 	}
 
 	// A entrega existe: escala só o que a verificação provou falho.
-	// Green() sozinha não basta — o passo de mutação tem ExpectFail, logo
-	// é neutro no Green e um teste verde com mutação que não provou nada
-	// continua "verde". MutationProved é o fato que separa "o teste pega
-	// o defeito" de "o teste passa até com a correção desfeita".
+	// Green() já reprova sonda que não falhou (ExpectFail com exit 0 não é
+	// verde); o que ele não vê é sonda que não rodou — pulada ou ausente,
+	// o Green segue e só MutationProved separa "o teste pega o defeito"
+	// de "a entrega ficou sem prova".
 	switch {
 	case !rep.Green():
 		return Decisao{Escala: true, NovoPercentil: cfg.DegrauPercentil,

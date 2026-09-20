@@ -21,6 +21,13 @@ import (
 // Resposta sem o noul conta como abaixo do corte, como em SelectEvidence.
 const KeepThreshold = 0.5
 
+// resultadoStateCap e o teto do resultado enviado ao Jev no state: o noul
+// julga se a saida precisa ficar verbatim, nao a confere — e saidas de
+// ferramenta ja chegam limitadas a 64 KB pelo tools.Registry, entao sem
+// corte um unico resultado comeria o orcamento do state inteiro. Mesmo
+// precedente do digestFieldCap do watchdog (agent/precondition.go).
+const resultadoStateCap = 4000
+
 // Asker e a parte do cliente Jev de que a compactacao precisa.
 // *jev.Client implementa.
 type Asker interface {
@@ -59,7 +66,7 @@ func Turns(ctx context.Context, a Asker, tarefa string, turns []agent.Turn) ([]a
 				"interacao": map[string]any{
 					"id":        call.Args["_id"],
 					"chamada":   callDesc(call),
-					"resultado": res.Output,
+					"resultado": clipResultado(res.Output),
 				},
 			}
 			ans, err := a.Ask(ctx, state, jev.CompactionQuestions())
@@ -129,4 +136,14 @@ func callDesc(c tools.Call) string {
 // precisa conter "truncado" para que o trace nunca esconda o que saiu.
 func truncMarker(out string) string {
 	return fmt.Sprintf("[resultado truncado pela compactacao: %d bytes descartados]", len(out))
+}
+
+// clipResultado corta o resultado que vai no state no teto, declarando o
+// corte — so o state e clipado; o trace mantem a saida inteira ou o
+// marcador de truncamento, nada no meio.
+func clipResultado(s string) string {
+	if len(s) <= resultadoStateCap {
+		return s
+	}
+	return fmt.Sprintf("%s…[%d bytes cortados]", s[:resultadoStateCap], len(s)-resultadoStateCap)
 }

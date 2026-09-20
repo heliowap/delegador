@@ -50,13 +50,16 @@ func Result(w io.Writer, in Input) {
 		fmt.Fprintln(w)
 	}
 
-	// Divergencias: o que desmente a entrega vem antes do veredito.
-	if in.AfirmaVerde >= afirmaVerdeMin && !in.Verify.Green() {
+	// Divergencias: o que desmente a entrega vem antes do veredito. A flag
+	// e relatorio afirmando verde contra exit code de passo real que
+	// discorda — sonda ExpectFail que nao falhou nao e divergencia, e
+	// falta de prova, e o aviso de mutacao abaixo ja a cobre.
+	if in.AfirmaVerde >= afirmaVerdeMin && hasRedStep(in.Verify.Steps) {
 		fmt.Fprintf(w, "DIVERGENCIA: o relatorio afirma verde (noul %.2f), mas a verificacao saiu vermelha.\n",
 			in.AfirmaVerde)
 		for _, s := range in.Verify.Steps {
-			if s.Skipped || s.ExpectFail || s.ExitCode == 0 {
-				continue
+			if s.Skipped || (s.ExpectFail && s.ExitCode != 0) || (!s.ExpectFail && s.ExitCode == 0) {
+				continue // so contradiz a expectativa quem saiu dela
 			}
 			fmt.Fprintf(w, "  saida real de %s:\n", s.Name)
 			fmt.Fprintln(w, indent(s.Stdout, "    "))
@@ -80,6 +83,13 @@ func Result(w io.Writer, in Input) {
 	for _, s := range in.Verify.Steps {
 		if s.Skipped {
 			fmt.Fprintf(w, "  %s: pulado\n", s.Name)
+			continue
+		}
+		// Sonda que falhou como devia provou algo: anota para um exit
+		// nao-zero sob VERDE nao ler como falha. Sonda que saiu exit 0
+		// mostra o exit real — o aviso de mutacao ja disse o que faltou.
+		if s.ExpectFail && s.ExitCode != 0 {
+			fmt.Fprintf(w, "  %s: exit %d (esperado)\n", s.Name, s.ExitCode)
 			continue
 		}
 		fmt.Fprintf(w, "  %s: exit %d\n", s.Name, s.ExitCode)
@@ -114,10 +124,25 @@ func Result(w io.Writer, in Input) {
 	if in.Escolha.Motivo != "" {
 		fmt.Fprintf(w, "rota:     %s\n", in.Escolha.Motivo)
 	}
+	// Houve ou nao escalada se declara, nao se subentende pela ausencia.
+	escalada := "nao"
 	if in.Escalou {
-		fmt.Fprintln(w, "escalada: sim")
+		escalada = "sim"
 	}
+	fmt.Fprintf(w, "escalada: %s\n", escalada)
 	fmt.Fprintf(w, "custo:    executor $%.4f, jev $%.5f\n", in.ExecutorUSD, in.JevUSD)
+}
+
+// hasRedStep diz se algum passo real (nao sonda ExpectFail) saiu vermelho.
+// Diverge de Verify.Green: sonda que nao falhou derruba o Green mas nao e
+// divergencia — e prova que faltou, nao exit code que discorda.
+func hasRedStep(steps []verify.Step) bool {
+	for _, s := range steps {
+		if !s.Skipped && !s.ExpectFail && s.ExitCode != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // indent desloca cada linha do texto para dentro do bloco.

@@ -55,6 +55,24 @@ func TestDizQuandoModeloNaoTemNota(t *testing.T) {
 	}
 }
 
+// Sonda ExpectFail que saiu exit 0 nao provou nada: isso e falta de prova
+// (o aviso de mutacao cobre), nao relatorio contra exit code que discorda.
+func TestMutacaoQueNaoProvouNaoEhDivergencia(t *testing.T) {
+	var b bytes.Buffer
+	Result(&b, Input{
+		Verify: verify.Report{Steps: []verify.Step{
+			{Name: "teste", ExitCode: 0},
+			{Name: "mutacao", ExpectFail: true, ExitCode: 0}},
+			MutationProved: false},
+		AfirmaVerde: 0.95})
+	if bytes.Contains(b.Bytes(), []byte("DIVERGENCIA")) {
+		t.Errorf("mutacao que nao provou e falta de prova, nao divergencia:\n%s", b.String())
+	}
+	if !bytes.Contains(b.Bytes(), []byte("mutacao")) {
+		t.Error("o aviso de mutacao precisa continuar aparecendo")
+	}
+}
+
 func routeEscolhaNaoMedida() route.Escolha {
 	return route.Escolha{NaoMedido: true}
 }
