@@ -4,6 +4,12 @@
 // sinal semântico via Jev: o noul sem_progresso, que só veta depois de
 // cruzar o limiar em janelas consecutivas. Falha do Jev nunca veta — o
 // laço sobrevive à rede cair.
+//
+// O sinal determinístico fora_do_escopo do spec §6.3 fica de fora de
+// propósito: a pré-condição só recebe os turnos, nunca a política nem o
+// escopo declarado. tools.Allow já nega escrita fora do escopo quando
+// Policy.WritePrefixes casa com o briefing — a cobertura depende de quem
+// liga o laço configurar os prefixos iguais ao escopo, não mais largos.
 package agent
 
 import (
