@@ -16,6 +16,7 @@ func handlers() map[string]handler {
 	return map[string]handler{
 		"doctor": runDoctor,
 		"plan":   runPlan,
+		"run":    runRun,
 	}
 }
 

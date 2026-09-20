@@ -64,6 +64,12 @@ type Job struct {
 	Dimensao    string  `json:"dimensao"`
 	Autocontida float64 `json:"autocontida"`
 
+	// Escaladas conta quantas escaladas a tarefa ja consumiu. Persistido no
+	// mesmo Save que atualiza Percentil e Model na escalada: um restart
+	// entre o degrau do percentil e o registro da tentativa nao pode
+	// reaplicar o degrau nem perder o modelo novo.
+	Escaladas int `json:"escaladas"`
+
 	PID          int           `json:"pid"`
 	PGID         int           `json:"pgid"`
 	CreatedAt    time.Time     `json:"created_at"`

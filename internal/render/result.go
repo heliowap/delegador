@@ -75,9 +75,9 @@ func Result(w io.Writer, in Input) {
 
 	// O veredito verificado: os numeros de verify.json, fatos sem modelo.
 	if in.Verify.Green() {
-		fmt.Fprintln(w, "veredito: VERDE")
+		fmt.Fprintln(w, "veredito: verde")
 	} else {
-		fmt.Fprintln(w, "veredito: VERMELHO")
+		fmt.Fprintln(w, "veredito: vermelho")
 	}
 	fmt.Fprintf(w, "  diff: %d arquivos, +%d -%d\n", in.Verify.Files, in.Verify.Added, in.Verify.Removed)
 	for _, s := range in.Verify.Steps {
