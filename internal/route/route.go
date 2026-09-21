@@ -69,14 +69,43 @@ type Opcoes struct {
 }
 
 // LimiarAutocontida e o corte abaixo do qual a rota deixa de decidir so por
-// preco. Valor de partida, a recalibrar com evals/.
-const LimiarAutocontida = 0.50
+// preco.
+//
+// CALIBRADO em 2026-09-21 contra as 7 fixtures rotuladas de evals/, mediana
+// de 3 execucoes cada:
+//
+//	rotulo true : 0.900  0.920  0.940
+//	rotulo false: 0.050  0.050  0.080  0.350
+//
+// Vao de 0.550 entre as classes; o ponto medio e 0.625. O valor anterior,
+// 0.50, tambem separava, mas ficava descentrado — margem de 0.15 de um lado
+// e 0.40 do outro.
+//
+// O centro e escolha deliberada, e se houvesse que descentrar seria para
+// CIMA: os dois erros custam coisas diferentes. Tratar tarefa ambigua como
+// fechada manda o mais barato para um trabalho que ele vai abandonar no meio,
+// e custa o run inteiro. Tratar fechada como ambigua compra um modelo um
+// pouco melhor, e custa centavos.
+const LimiarAutocontida = 0.625
 
 // PisoTauMinimo e o percentil MINIMO de tau_bench exigido numa tarefa pouco
 // autocontida, independente de quao baixo seja o corte de complexidade.
 // Ambiguidade e eixo proprio: uma tarefa simples e ambigua ainda exige um
 // modelo que sustente o enquadramento, e usar o percentil da complexidade
 // deixaria essa combinacao sem piso nenhum.
+//
+// NAO CALIBRADO POR FIXTURE, e nao da para calibrar assim. Ao contrario do
+// LimiarAutocontida, este nao e um corte sobre resposta do Jev: e um
+// percentil dentro do roster, e nao existe rotulo de verdade dizendo "qual
+// percentil de tau basta". Calibra-lo exigiria rodar tarefas ambiguas com
+// modelos de tau diferente e medir onde a taxa de sucesso cai — experimento
+// que a sessao de 2026-09-21 tentou e nao conseguiu concluir.
+//
+// O que sustenta 0.50, entao, e o efeito concreto sobre o roster atual, que
+// TestPisoExcluiOsFracosEmAgenticoDoRosterReal fixa: ele exclui exatamente
+// os dois modelos mais fracos em horizonte longo, e nenhum outro. Se o roster
+// mudar de forma que esse teste quebre, o numero precisa ser revisto — e nao
+// o teste.
 const PisoTauMinimo = 0.50
 
 // Escolher mantem a assinatura original: rota sem ajuste de autocontencao.

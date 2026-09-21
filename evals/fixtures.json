@@ -78,14 +78,16 @@
       "texto": "# Tarefa\n\nEm `internal/jev/questions.go`, dentro de `RouteQuestions()`, adicione a entrada `dimensao_dominante` exatamente como no trecho:\n\n```go\n\"dimensao_dominante\": Choice{\n\tInstructions: \"Identifique qual capacidade a tarefa mais exige.\",\n\tCriteria: map[string]string{\n\t\t\"mecanica\":   \"Transformar codigo de forma local e ja determinada.\",\n\t\t\"raciocinio\": \"Entender o problema para decidir a solucao.\",\n\t\t\"agentica\":   \"Operar ferramentas em sequencia ate terminar.\",\n\t},\n},\n```\n\nDepois rode `go test ./internal/jev/` e confirme o verde.",
       "esperado": {
         "tarefa_autocontida": true
-      }
+      },
+      "medido_2026_09_21": 0.9
     },
     {
       "nome": "briefing que so aponta o sintoma",
       "texto": "# Tarefa\n\nO login falha de forma intermitente quando o cache de sessao esta quente. Nao se sabe onde esta o defeito.\n\n## Correcao\n\nEncontre a causa e corrija; escreva um teste que a reproduza.",
       "esperado": {
         "tarefa_autocontida": false
-      }
+      },
+      "medido_2026_09_21": 0.05
     },
     {
       "nome": "FALHA MEDIDA e2e: briefing completo lido como nao autocontido",
@@ -93,28 +95,32 @@
       "esperado": {
         "tarefa_autocontida": true
       },
-      "nota": "Em 2026-09-21 este briefing exato recebeu 0.19. Ele traz o trecho com arquivo:linha, o contrato, a ordem de trabalho e os comandos copiaveis: executar e transcrever."
+      "nota": "Em 2026-09-21 este briefing exato recebeu 0.19. Ele traz o trecho com arquivo:linha, o contrato, a ordem de trabalho e os comandos copiaveis: executar e transcrever.",
+      "medido_2026_09_21": 0.94
     },
     {
       "nome": "autocontida: defeito, contrato e comandos, sem escolha a fazer",
       "texto": "# Tarefa\n\n`internal/fmtx/moeda.go:22` arredonda para baixo; `docs/adr/0031.md` exige arredondamento bancario.\n\n## Onde esta o defeito\n\n`internal/fmtx/moeda.go:22`:\n```\nreturn math.Floor(v*100) / 100\n```\n\n## Contrato violado\n\n`docs/adr/0031.md`: \"Valores monetarios usam arredondamento bancario (half-to-even) em toda a borda de saida.\"\n\n## Ordem de trabalho\n\n1. Escreva o teste com os casos 2.675 -> 2.68 e 2.665 -> 2.66.\n2. Confirme o vermelho.\n3. Corrija.\n\n```bash\ngo test ./internal/fmtx/ -run TestMoeda\ngo vet ./...\n```",
       "esperado": {
         "tarefa_autocontida": true
-      }
+      },
+      "medido_2026_09_21": 0.92
     },
     {
       "nome": "nao autocontida: objetivo sem caminho",
       "texto": "# Tarefa\n\nA listagem de pedidos esta lenta em producao. Deixe mais rapida.\n\n```bash\ngo test ./...\n```",
       "esperado": {
         "tarefa_autocontida": false
-      }
+      },
+      "medido_2026_09_21": 0.05
     },
     {
       "nome": "nao autocontida: localizada, mas a solucao e escolha em aberto",
       "texto": "# Tarefa\n\n`internal/api/pedidos.go:88` faz uma consulta por item da lista, e a listagem de 500 pedidos dispara 500 consultas.\n\nResolva o N+1. Escolha entre carregar em lote, adicionar cache por request ou desnormalizar a coluna — o time nao decidiu qual, e a decisao e sua.\n\n```bash\ngo test ./internal/api/\n```",
       "esperado": {
         "tarefa_autocontida": false
-      }
+      },
+      "medido_2026_09_21": 0.08
     },
     {
       "nome": "fronteira: aponta o defeito mas nao diz a correcao",
@@ -122,7 +128,8 @@
       "esperado": {
         "tarefa_autocontida": false
       },
-      "nota": "Fronteira deliberada: tem arquivo:linha e comando, mas a correcao (mutex, canal, CAS) nao esta dita."
+      "nota": "Fronteira deliberada: tem arquivo:linha e comando, mas a correcao (mutex, canal, CAS) nao esta dita.",
+      "medido_2026_09_21": 0.35
     }
   ],
   "watchdog": [
@@ -224,5 +231,32 @@
       },
       "nota": "Negativa de verdade: nenhum dos dois textos diz como saber que terminou."
     }
-  ]
+  ],
+  "_calibragem": {
+    "tarefa_autocontida": {
+      "as_of": "2026-09-21",
+      "metodo": "mediana de 3 execucoes por fixture, estado com briefing.texto",
+      "classe_true": [
+        0.9,
+        0.92,
+        0.94
+      ],
+      "classe_false": [
+        0.05,
+        0.05,
+        0.08,
+        0.35
+      ],
+      "vao": 0.55,
+      "limiar_escolhido": 0.625,
+      "justificativa": "Ponto medio do vao. Se houvesse que descentrar seria para cima: tratar tarefa ambigua como fechada custa o run inteiro, tratar fechada como ambigua custa centavos."
+    },
+    "piso_tau_minimo": {
+      "as_of": "2026-09-21",
+      "valor": 0.5,
+      "calibrado_por_fixture": false,
+      "por_que_nao": "Nao e corte sobre resposta do Jev, e percentil dentro do roster. Nao existe rotulo dizendo qual percentil de tau basta. Calibrar exigiria rodar tarefas ambiguas com modelos de tau diferente e medir onde a taxa de sucesso cai — experimento tentado em 2026-09-21 e nao concluido.",
+      "o_que_sustenta": "O efeito sobre o roster real, fixado por TestPisoExcluiOsFracosEmAgenticoDoRosterReal: exclui exatamente os dois modelos de pior agentic_index (29.0 e 41.0) e nenhum outro."
+    }
+  }
 }
