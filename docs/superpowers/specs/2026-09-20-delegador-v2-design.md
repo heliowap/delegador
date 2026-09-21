@@ -78,6 +78,10 @@ internal/
   cascade/    política de escalada
   gate/       delegabilidade e briefing
   render/     saída de terminal
+  ledger/     custo do executor, separado do custo do Jev
+  gitx/       worktree, diff, apply -R
+  safeenv/    resolução de chave e base URL sem vazar em log
+  pluginfiles/ conformidade da superfície do plugin
 ```
 
 O laço é curto e é o único lugar com estado de conversa:
@@ -101,7 +105,14 @@ com três camadas e sem modelo em nenhuma:
    Configurável por repo.
 3. **Negação dura, não sobreponível por configuração:** `git push`, `git
    commit`, `git reset --hard`, `rm -rf`, `curl`, `wget`, `ssh`, qualquer
-   coisa com credencial no argumento.
+   coisa com credencial no argumento, e o primeiro token comparado pelo
+   **nome do binário** — `/usr/bin/curl` é `curl`, `../../bin/ssh` é `ssh`.
+4. **Escrita em `.git` é negada em qualquer nível**, no caminho pedido **e**
+   no caminho resolvido. Descoberto durante a implementação, não no desenho:
+   um symlink dentro da worktree apontando para `.git` não tem o segmento no
+   pedido e só o revela depois de resolver. Escrever em `.git/hooks/pre-commit`
+   ou em `.git/config` é execução de código arbitrário na próxima operação de
+   git — é escalada de privilégio, não edição de arquivo.
 
 Recusa não mata o laço: volta ao modelo como resultado de ferramenta dizendo o
 que foi negado e por quê. Ele tenta outro caminho, em vez de morrer no meio —
@@ -285,3 +296,63 @@ decisão do autor; este documento já usa o nome novo nos caminhos.
 | Cascata vira desculpa para sempre escalar | Uma escalada por tarefa; escalada só por falha **de verificação**, nunca por recusa de permissão ou teto de custo |
 | Allowlist estreita demais trava tarefas legítimas | Recusa volta ao modelo como resultado, não mata o laço; o que foi negado é registrado, e o registro é a fonte para afrouxar com dado |
 | Proxy local indisponível | `doctor` confere antes do dispatch e falha com a causa, em vez de deixar o job morrer no meio |
+
+## 15. Desvios medidos na implementação
+
+Registrados depois de executar o plano v2 inteiro e validar de ponta a ponta
+contra o proxy real em 2026-09-21. O spec descreve a intenção; esta seção
+registra onde a realidade discordou e quem venceu.
+
+### Estado em disco
+
+O v1 previa `verify.json` e `result.md` únicos. A implementação grava
+`verify-N.json` e `verify-N.diff` **numerados por tentativa**, mais
+`result.txt`. A cascata produz uma verificação por tentativa, e um arquivo só
+apagaria a evidência da primeira — que é justamente a que explica por que
+escalou. A implementação está certa e o spec estava errado.
+
+Sumiram `export.json` e `stdout.log`: eram do CLI que o v2 não usa. Entraram
+`executor.jsonl` e `run.lock`.
+
+O `job.json` ganhou `WritePrefixes`, `AllowCommands`, `TestCmd`, `SuiteCmd`,
+`LintCmd` e `TestGlobs`. A `tools.Policy` e a `verify.Config` precisam
+sobreviver entre o `plan` e o `run`, e o desenho não dizia onde guardá-las.
+
+### Pré-condição e escopo
+
+O sinal `fora_do_escopo` do §6.3 ficou deferido durante a execução, por um
+defeito da assinatura `Precondition func(turns []Turn) *Veto`, que não dava
+acesso à política. Corrigido depois: a política entra pelo `PreConfig`, que é
+aditivo, e o sinal reusa `tools.Allow` em vez de reimplementar a regra de
+escopo. `Allow` **nega** a escrita; o sinal acusa o modelo **insistindo** nela.
+Uma tentativa é engano, a segunda é sintoma; sem prefixo declarado o sinal
+fica desligado.
+
+### Ambiente
+
+`DELEGADOR_BASE_URL` e `DELEGADOR_API_KEY` para o executor;
+`TYPESAFE_BASE_URL` e `TYPESAFE_API_KEY` para o Jev. O `doctor` distingue
+"há servidor na ponta" de "a chave funciona": um 401 prova a primeira e
+refuta a segunda, e as duas aparecem no relatório.
+
+### Calibragem que o e2e expôs
+
+A primeira execução real — corrigir uma função de uma linha que subtraía em
+vez de somar — fechou verde a **US$ 0,0034** (executor 0,0023, Jev 0,0011),
+com o teste de mutação provando a correção. Mas duas respostas do Jev
+destoaram e precisam de fixture em `evals/`:
+
+- `dimensao_dominante` respondeu **agêntica** para uma troca de sinal de um
+  caractere. O esperado era `mecanica`. Rota errada aqui compra modelo caro
+  para trabalho trivial, que é exatamente o desperdício que a cascata existe
+  para evitar.
+- `tarefa_autocontida` respondeu **0,19**, ou seja "exige decidir no
+  caminho", para uma tarefa cujo briefing trazia o trecho com `arquivo:linha`,
+  o contrato e os comandos. O esperado era alto.
+
+A seleção de evidência manteve 1 de 3 itens — descartou a fonte do contrato e
+o erro observado. Defensável, porque o texto da tarefa já citava os dois, mas
+merece fixture para confirmar que o critério é esse e não agressividade.
+
+Nenhuma dessas é defeito de código: são as perguntas precisando de calibragem
+contra dados reais, que é o que `evals/` existe para fazer.

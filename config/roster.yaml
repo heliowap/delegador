@@ -46,6 +46,17 @@ modelos:
     humano:
       custo_usd_por_mtok: null
       habilitado: true
+    eval:
+      # Confronto direto contra devin/swe-2 nas tarefas deste plano.
+      # Ver docs/handoffs/2026-09-20-eval-swe2-vs-glm-closeout.md
+      as_of: "2026-09-20"
+      resultado: nao_medido
+      tarefas_executadas: 0
+      causa: >
+        Quota diária da conta Devin esgotada antes da primeira invocação
+        (errorKind resource_exhausted, falha em 3s). Nenhuma tarefa rodou.
+        Ausência de resultado NÃO é resultado ruim — este campo existe para
+        impedir que a falta de medição seja lida como medição.
     nota: >
       Primeira escolha da cascata. Menor piso de tokens do roster (162, contra
       516-552 dos que passam por backend com prompt injetado) e custo por
@@ -183,6 +194,32 @@ modelos:
       terminal_bench_2_1: 0.928    # Fable 5.1: 0.914 — melhor do comparativo
       terminal_bench_4: 0.273      # Fable 5.1: 0.558 | GPT-6 Astra: 0.579
       passos_ate_primeira_edicao: 18
+    eval:
+      # Medido contra as tarefas deste próprio plano, por código.
+      # Ver docs/handoffs/2026-09-20-eval-swe2-vs-glm-closeout.md
+      as_of: "2026-09-20"
+      modelo_testado: swe-2-max
+      resultado: parcial_sem_confronto
+      operacao:
+        tarefas_verdes: 3          # 9, 10, 11 — sem recusa
+        tarefas_tentadas: 4        # parou na 12
+        tempo_por_tarefa_s: [376, 543, 152]
+        linhas_por_tarefa: [957, 506, 230]
+        parou_em: 12
+        causa_da_parada: recusa_de_permissao_dupla   # não incapacidade
+      capacidade:
+        tarefas_nuas: [12, 13, 14]
+        passou: 0
+        alterou_teste: 0           # nenhuma alteração de teste em 3 tarefas
+        causa: recusa_de_permissao # as 3 morreram no `go test` do Step 2
+        valido: false              # ver defeito de isolamento no closeout
+      recusas_reais: 5             # em 9 invocações registradas
+      custo_usd: 0.0               # promoção gratuita
+      conclusivo: false
+      nota_do_eval: >
+        Sem o braço do GLM, não houve confronto. Não use estes números para
+        escolher padrão de cascata — eles dizem o que o swe-2-max fez sozinho,
+        não que ele é melhor ou pior que o glm.
     nota: >
       Classificado `barato`, não `forte`. Três fontes independentes convergem:
       (1) o próprio fornecedor publica 0.273 no Terminal-Bench 4 contra 0.558
@@ -190,8 +227,13 @@ modelos:
       difícil, assinatura de otimização específica; (2) o benchmark de terceiro
       dá ao Fable 5.1 o maior coding_index das 149 entradas; (3) observação
       direta em 2026-09-20 — executou 8 tarefas deste plano com fidelidade,
-      mas 98% do código estava escrito no plano, e ele morreu na tarefa 9, a
-      primeira que exigia montagem própria. A Cognition o posiciona por
+      mas 98% do código estava escrito no plano. CORRIGIDO em 2026-09-20 pelo
+      eval: a afirmação anterior de que "ele morreu na tarefa 9, a primeira que
+      exigia montagem própria" está errada — a tarefa 9 fechou verde em 6m16s
+      (957 linhas, 13 arquivos, sem recusa), e a 10 e a 11 também. Ele parou na
+      12, por recusa de permissão, não por incapacidade. A classificação
+      `barato` continua de pé pelas fontes (1) e (2), não pela (3).
+      A Cognition o posiciona por
       eficiência: 64% mais barato que o Fable com paridade no FrontierCode,
       primeira edição real em 18 passos contra 48 do antecessor. Isso é
       argumento de camada barata, e foi assim que reclassifiquei.

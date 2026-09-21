@@ -18,6 +18,28 @@ O plano v1 entregava a implementação pronta: 72% a 91% de cada tarefa era cód
 
 Regra que vale para todas: **alterar um teste é reprovação.** Se um teste parece errado, pare e diga por quê — não o adapte. Confira antes de cada commit com `git diff --stat -- '*_test.go'`.
 
+## Status — executado
+
+Executado integralmente em 2026-09-20/21. As 15 tarefas estão commitadas na
+worktree `~/VSCode/delegador-v2` (branch `v2/base`), com **156 testes
+passando**, `go vet` limpo e zero dependências externas. Validado de ponta a
+ponta contra o proxy real: uma correção completa, com teste de mutação
+provando, por US$ 0,0034.
+
+Quatro coisas que a execução mudou e este documento não previa — todas
+registradas no [§15 do spec](../specs/2026-09-20-delegador-v2-design.md):
+
+1. **Task 7** não implementou o sinal `fora_do_escopo`, por defeito da
+   assinatura `Precondition` que eu escrevi aqui. Corrigido depois, com a
+   política entrando pelo `PreConfig`.
+2. **Task 3** não previa negar escrita em `.git`. A implementação adicionou, e
+   depois encontrou e fechou um bypass por symlink apontando para lá. Escrever
+   em `.git/hooks/pre-commit` é execução de código, não edição de arquivo.
+3. **Task 8** precisou que `config/roster.yaml` existisse na worktree; a
+   branch parte de `98bce8e`, anterior ao arquivo.
+4. **Task 13/14** gravam `verify-N.json` numerado por tentativa da cascata,
+   não o `verify.json` único que o spec previa.
+
 ## Global Constraints
 
 - **Go 1.27+**, módulo `github.com/heliowap/delegador`.
