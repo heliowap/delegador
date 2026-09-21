@@ -6,6 +6,7 @@ package roster
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -50,6 +51,36 @@ type Benchmark struct {
 	TauBench          float64 `json:"tau_bench"`
 	TauBenchDesvio    float64 `json:"tau_bench_desvio"`
 	CustoPorTarefaUSD float64 `json:"custo_por_tarefa_usd"`
+
+	// Os precos com que o benchmark de terceiro mediu CustoPorTarefaUSD.
+	// Existem para dividir o custo por eles e recuperar o TAMANHO da
+	// tarefa em tokens, que e o que a rota quer saber: quanto trabalho o
+	// modelo precisa para terminar. O preco e do fornecedor do benchmark e
+	// nao e o preco de quem roda — para isso valem os campos de `humano`.
+	PrecoEntradaUSDPorMTok float64 `json:"preco_entrada_usd_por_mtok"`
+	PrecoSaidaUSDPorMTok   float64 `json:"preco_saida_usd_por_mtok"`
+}
+
+// TokensPorTarefa estima quantos tokens o modelo gasta para terminar uma
+// tarefa do benchmark, desfazendo o preco de dentro do custo medido.
+//
+// A divisao usa a media simples entre entrada e saida porque o benchmark
+// nao publica a proporcao entre as duas. A suposicao e grosseira, mas e a
+// MESMA para todos os modelos, e o que a rota usa e a ordem entre eles, nao
+// o valor absoluto. Zero quando falta preco: sem ele nao ha o que desfazer.
+func (b *Benchmark) TokensPorTarefa() float64 {
+	if b == nil || b.CustoPorTarefaUSD <= 0 {
+		return 0
+	}
+	entrada, saida := b.PrecoEntradaUSDPorMTok, b.PrecoSaidaUSDPorMTok
+	if saida == 0 {
+		saida = entrada
+	}
+	medio := (entrada + saida) / 2
+	if medio <= 0 {
+		return 0
+	}
+	return b.CustoPorTarefaUSD / medio * 1e6
 }
 
 // Load lê o roster YAML. O formato é fixo e raso — escalares, uma lista de
@@ -219,6 +250,15 @@ func parse(raw []byte) ([]Model, error) {
 				p = &atual.Benchmark.TauBenchDesvio
 			case "custo_por_tarefa_usd":
 				p = &atual.Benchmark.CustoPorTarefaUSD
+			case "preco_openrouter_usd_por_mtok":
+				// Unico mapa em linha do arquivo: {entrada: 0.15, saida: 0.50}.
+				// Vale um regex contido em vez de um terceiro nivel no parser.
+				ent, sai, err := precoEmLinha(valor)
+				if err != nil {
+					return nil, errf("preco_openrouter_usd_por_mtok: %v", err)
+				}
+				atual.Benchmark.PrecoEntradaUSDPorMTok = ent
+				atual.Benchmark.PrecoSaidaUSDPorMTok = sai
 			}
 			if p != nil {
 				f, err := strconv.ParseFloat(valor, 64)
@@ -337,4 +377,23 @@ func ehNulo(v string) bool {
 
 func ehTrue(v string) bool {
 	return v == "true"
+}
+
+// precoEmLinha le `{entrada: 0.15, saida: 0.50}`. Ausencia de um dos dois
+// nao e erro: saida vazia cai no preco de entrada em TokensPorTarefa.
+func precoEmLinha(v string) (entrada, saida float64, err error) {
+	campo := func(nome string) (float64, error) {
+		m := regexp.MustCompile(nome + `\s*:\s*([0-9.]+)`).FindStringSubmatch(v)
+		if m == nil {
+			return 0, nil
+		}
+		return strconv.ParseFloat(m[1], 64)
+	}
+	if entrada, err = campo("entrada"); err != nil {
+		return 0, 0, err
+	}
+	if saida, err = campo("saida"); err != nil {
+		return 0, 0, err
+	}
+	return entrada, saida, nil
 }

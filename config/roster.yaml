@@ -25,6 +25,21 @@
 # São dois campos porque saída custa de 3 a 5 vezes a entrada, e um número
 # único aplicado aos dois lados subestimava a conta na mesma proporção. Um
 # ledger que erra por 3x não é auditável.
+#
+# `preco_openrouter_usd_por_mtok` (dentro de `benchmark:`) passou a ser um
+# campo LOAD-BEARING em 2026-09-21. Não é o seu preço: é o preço com que o
+# benchmark mediu `custo_por_tarefa_usd`, e a rota divide um pelo outro para
+# recuperar quantos TOKENS o modelo gasta para terminar uma tarefa. Esse é o
+# desempate entre os que passam o corte de qualidade.
+#
+# Preço deixou de ser critério de rota de propósito. Quem monta este arquivo
+# já decidiu o orçamento ao escolher quais modelos entram; dentro do que
+# entrou, o que a rota persegue é qualidade e velocidade, e menos tokens
+# serve às duas. O custo é medido no fim, no relatório, como efeito.
+#
+# A diferença é material neste roster: por dólar o deepseek parece 66x
+# melhor que o opus-5; por trabalho, precisa de ~34k tokens contra ~30k.
+# O preço dizia o contrário do que a eficiência diz.
 
 versao: 1
 as_of_benchmark: "2026-09-20T00:03:27Z"

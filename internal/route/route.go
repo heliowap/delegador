@@ -200,7 +200,7 @@ func EscolherCom(ms []roster.Model, d Dimensao, percentil float64, opts Opcoes) 
 	if len(passing) > 0 {
 		best := passing[0]
 		for _, m := range passing[1:] {
-			if m.Benchmark.CustoPorTarefaUSD < best.Benchmark.CustoPorTarefaUSD {
+			if trabalhoPorTarefa(m) < trabalhoPorTarefa(best) {
 				best = m
 			}
 		}
@@ -303,8 +303,34 @@ func indexOf(m roster.Model, d Dimensao) float64 {
 	return 0
 }
 
+// trabalhoPorTarefa e o desempate entre os que passaram o corte de
+// qualidade: quantos TOKENS o modelo precisa para terminar uma tarefa.
+//
+// O desempate era o menor custo por tarefa em dolar. Preco nao e criterio
+// de rota: quem monta o roster ja decidiu o que cabe no orcamento ao
+// escolher quais modelos entram. Entre os que passaram, o que interessa e
+// quanto trabalho cada um precisa — menos tokens e menos tempo de parede,
+// menos contexto queimado e, de quebra, menos fatura; o custo e o efeito,
+// nao a causa.
+//
+// A diferenca e material no roster de 2026-09-21: por dolar, o deepseek
+// (US$ 0,0075/tarefa) parece 66x melhor que o opus-5 (US$ 0,4930). Por
+// trabalho, o deepseek precisa de 34k tokens para terminar e o opus de 30k.
+// O preco dizia o contrario do que a eficiencia diz.
+//
+// Sem preco do benchmark nao da para desfazer o custo: o modelo vai para o
+// fim da fila em vez de ganhar por um zero.
+func trabalhoPorTarefa(m roster.Model) float64 {
+	t := m.Benchmark.TokensPorTarefa()
+	if t <= 0 {
+		return math.Inf(1)
+	}
+	return t
+}
+
 // costMTok devolve o custo declarado por token; não declarado é o mais
-// caro possível — null não é zero.
+// caro possível — null não é zero. Só decide onde NAO ha benchmark: sem
+// indice nao ha sinal de eficiencia, e preco e o unico dado que sobrou.
 func costMTok(m roster.Model) float64 {
 	if m.CustoUSDPorMTok == nil {
 		return math.Inf(1)

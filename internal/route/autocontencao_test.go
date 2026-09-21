@@ -16,7 +16,8 @@ func comTau(id string, cod, tau, custoTarefa, preco float64) roster.Model {
 	return roster.Model{ID: id, Habilitado: true, CustoUSDPorMTok: &p,
 		Sondado: roster.Probe{ToolCall: true},
 		Benchmark: &roster.Benchmark{CodingIndex: cod, IntelligenceIndex: cod * 0.6,
-			TauBench: tau, CustoPorTarefaUSD: custoTarefa}}
+			TauBench: tau, CustoPorTarefaUSD: custoTarefa,
+			PrecoEntradaUSDPorMTok: preco, PrecoSaidaUSDPorMTok: preco * 5}}
 }
 
 func semNota(id string, custoTarefa, preco float64) roster.Model {
