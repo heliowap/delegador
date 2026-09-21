@@ -55,6 +55,7 @@ com a citação da issue de onde cada um saiu.
 | 2 | [#823](https://github.com/expr-lang/expr/issues/823) | verde, vetado | `teto_de_custo` | 19 | 3,65 | outra rota, também válida (`checker.go` em vez de `expr.go`+patcher) |
 | 3 | [#888](https://github.com/expr-lang/expr/issues/888) | **verde** | final | 8 | 1,40 | **idêntica byte a byte** (`+fnInOffset` em `InElem`) |
 | 4 | [#836](https://github.com/expr-lang/expr/issues/836) | vermelho | `sem_escrita` | 12 | 2,17 | nada escrito |
+| 4″ | #836 (teto US$ 12, pós-revisão) | **verde, escalado** | final | 13+28 | 24,34 | **mesmos 2 arquivos** do mantenedor |
 | 4′ | #836 (repetição) | vermelho | `teto_de_custo` | 22 | 6,74 | 4 arquivos, suíte e lint quebrados |
 | 5 | [#685](https://github.com/expr-lang/expr/issues/685) | vermelho | `sem_escrita` | 10 | 1,61 | nada escrito |
 | 5′ | #685 (repetição) | **verde** | final | 10 | 1,32 | outra rota, suíte inteira verde |
@@ -157,6 +158,46 @@ mecanismo existe fora do teste unitario, que o re-roteio troca de modelo de
 verdade e que a verificacao pos-escalada e a mesma. Quantas vezes vale a
 pena escalar continua sem medida.
 
+### O caso 4, com o teto levantado
+
+O #836 era o que faltava: parava por teto de custo, que e orcamento nosso e
+por definicao nao escala. Com `--teto-usd 12` e `--max-turns 45`:
+
+```
+1a tentativa  cpa-claude-opus-5(low)   13 turnos, US$  2,33, 441k tokens de entrada
+              veto sem_escrita, diff vazio, verificacao vermelha
+escalou:      cpa-claude-opus-5(low) -> claude-fable-5-1
+2a tentativa  claude-fable-5-1         28 turnos, US$ 22,02, 2.030k tokens de entrada
+              teste exit 0 | mutacao exit 1 (esperado) | suite exit 0 | lint exit 0
+relato:       go test ./... — conferencia inconclusiva (confianca 0,72)
+```
+
+**Verde**, em dois arquivos — `checker/checker.go` e `compiler/compiler.go` —
+que sao **exatamente os dois** do commit do mantenedor. 53 pacotes verdes
+conferidos por fora. Total US$ 24,34 em 596 segundos.
+
+Tres coisas que a execucao ensinou, todas contra previsoes minhas:
+
+**A previsao de qual veto dispararia estava errada.** Eu disse que o #836
+parava por teto de custo. Com o teto levantado, quem disparou foi
+`sem_escrita`, aos 13 turnos e US$ 2,33 — bem longe do teto. O teto anterior
+so era o limite binding porque cortava antes.
+
+**A conta de tokens por tarefa do benchmark nao prevê um laco agentico.** O
+roster diz que o `fable-5-1` termina uma tarefa com ~48k tokens. Esta gastou
+**2,03 milhoes de tokens de entrada** — 42x — porque o contexto e reenviado
+inteiro a cada turno e cresce. O numero do benchmark serve para ORDENAR
+modelos entre si (§16.1); nao serve para prever o custo de um run, e o
+desempate que ele alimenta continua sem validacao no nosso harness.
+
+**Por turno, o modelo escalado foi o mais caro dos dois**: 72,5k tokens de
+entrada por turno contra 34k do opus. O que justifica a escalada nao e
+eficiencia por turno — e ter terminado, contra um que nao terminou.
+
+E a conferencia de veracidade fez o que devia sem exagerar: marcou
+`go test ./...` como **inconclusiva a 0,72**, abaixo do corte de 0,8. Nao
+acusou nem absolveu.
+
 ## O que continua sem prova
 
 A cascata escalou **uma vez**. Uma amostra não diz com que frequência escalar
@@ -164,9 +205,15 @@ compensa, nem se o degrau de 0,25 é o certo, nem o que acontece quando o
 modelo escalado também falha — `MaxEscaladas: 1` manda o caso para o humano e
 isso nunca foi exercido em trabalho real.
 
-O caso 4 (issue #836) continua sem resposta: ele para por **teto de custo**,
-que é orçamento nosso e por definição não escala. Ou o teto sobe, ou ele fica
-fora do alcance da cascata.
+**Quanto custa uma escalada continua sem previsao.** As duas que rodaram
+custaram US$ 7,05 e US$ 24,34 — um fator de 3,5 entre elas, e nenhum numero
+do roster antecipava nem a ordem de grandeza. Enquanto isso, o teto e um
+palpite do operador, e `--teto-usd` existe para que ele seja um palpite
+consciente.
+
+Fica tambem sem medida o que acontece quando o modelo escalado **tambem**
+falha: `MaxEscaladas: 1` manda o caso para o humano com os dois diffs, e
+esse caminho nunca rodou em trabalho real.
 
 ## Harness
 
