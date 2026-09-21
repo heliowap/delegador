@@ -468,7 +468,9 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		// Os tetos vem do volume medido no plan; a flag so entra quando o
 		// usuario a passa, e o padrao de fabrica so quando o plan nao decidiu.
 		if j.CostCapUSD > 0 {
-			preCfg.CostCapUSD = j.CostCapUSD
+			// Cada tentativa recebe o teto de novo: o contador do watchdog
+			// e acumulado por job, e sem isso a escalada nasce morta.
+			preCfg.CostCapUSD = tetoDaTentativa(j.CostCapUSD, j.Escaladas)
 		}
 		if j.IdleTurns > 0 {
 			preCfg.IdleTurns = j.IdleTurns
