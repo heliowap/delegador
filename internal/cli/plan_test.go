@@ -189,3 +189,65 @@ func TestOutraReprovaNaoGanhaAExplicacao(t *testing.T) {
 		t.Errorf("explicacao fora de contexto: %q", b.String())
 	}
 }
+
+// O relatorio de um run vetado por custo manda levantar o teto. Ate
+// 2026-09-21 nao havia como seguir essa instrucao: o teto saia do volume e
+// so de la. A flag e a resposta — e o volume continua decidindo quando
+// ninguem diz nada.
+func TestTetoUSDSobrescreveOVolume(t *testing.T) {
+	semFlag := planaEDevolveJob(t, nil)
+	comFlag := planaEDevolveJob(t, []string{"--teto-usd", "12.5"})
+
+	if comFlag.CostCapUSD != 12.5 {
+		t.Errorf("teto = %v, quero o numero de quem opera (12.5)", comFlag.CostCapUSD)
+	}
+	if semFlag.CostCapUSD == 12.5 || semFlag.CostCapUSD <= 0 {
+		t.Errorf("sem a flag o teto tem de sair do volume, tenho %v", semFlag.CostCapUSD)
+	}
+	// O resto do orcamento nao se move: a flag e sobre custo, nao sobre
+	// turnos nem sobre tolerancia a ociosidade.
+	if comFlag.MaxTurns != semFlag.MaxTurns || comFlag.IdleTurns != semFlag.IdleTurns {
+		t.Errorf("a flag mexeu no que nao devia: turnos %d->%d, ociosos %d->%d",
+			semFlag.MaxTurns, comFlag.MaxTurns, semFlag.IdleTurns, comFlag.IdleTurns)
+	}
+}
+
+// planaEDevolveJob roda um plan completo contra o Jev falso e devolve o job
+// gravado, para as asserções serem sobre o que ficou no disco.
+func planaEDevolveJob(t *testing.T, extra []string) *job.Job {
+	t.Helper()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	srv := testsupport.StartFakeJev(t, nil)
+	t.Setenv("TYPESAFE_API_KEY", "k")
+	t.Setenv("TYPESAFE_BASE_URL", srv)
+
+	dir := t.TempDir()
+	rosterPath := filepath.Join(dir, "roster.yaml")
+	rosterYAML := "as_of_sondagem: \"" + time.Now().Format("2006-01-02") + "\"\n" +
+		"modelos:\n  - id: modelo-x\n    papel: barato\n    sondado:\n" +
+		"      tool_call: true\n    humano:\n      custo_usd_por_mtok: 0.5\n" +
+		"      habilitado: true\n"
+	if err := os.WriteFile(rosterPath, []byte(rosterYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	args := append([]string{
+		"plan", "--task", "corrigir Soma", "--evidence", writeEvidence(t, dir),
+		"--worktree", dir, "--test-cmd", "go test ./...", "--roster", rosterPath, "--json",
+	}, extra...)
+	var out, errBuf bytes.Buffer
+	if code := Run(context.Background(), args, &out, &errBuf); code != 0 {
+		t.Fatalf("plan exit = %d: %s", code, errBuf.String())
+	}
+	var v struct {
+		JobID string `json:"job_id"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+		t.Fatalf("stdout nao e JSON: %v\n%s", err, out.String())
+	}
+	j, err := job.Load(v.JobID)
+	if err != nil {
+		t.Fatalf("job.Load: %v", err)
+	}
+	return j
+}

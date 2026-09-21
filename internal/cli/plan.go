@@ -70,6 +70,8 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		rosterF       = fs.String("roster", "", "caminho do roster.yaml (padrao: o do modulo delegador)")
 		testesProntos = fs.Bool("testes-prontos", false,
 			"os testes ja estao no disco e sao o criterio; o briefing pede implementacao, nao teste")
+		tetoUSD = fs.Float64("teto-usd", 0,
+			"teto de custo por tentativa, em dolares; 0 usa o teto derivado do volume")
 		asJSON = fs.Bool("json", false, "saida em JSON")
 	)
 	var testGlobs []string
@@ -245,6 +247,14 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		orc := route.OrcamentoPara(cls.Volume, route.OrcamentoBase())
 		j.MaxTurns, j.CostCapUSD = orc.Turnos, orc.TetoUSD
 		j.IdleTurns = orc.TurnosOciosos
+		// O teto medido pelo volume e um palpite sobre o tamanho da tarefa,
+		// e quando ele erra o run morre com "CANCELADO: teto_de_custo" e a
+		// instrucao de levantar o teto — que ate 2026-09-21 nao tinha como
+		// ser seguida. Esta flag e a resposta a essa instrucao: o numero e
+		// de quem opera, e o volume so decide quando ninguem disse nada.
+		if *tetoUSD > 0 {
+			j.CostCapUSD = *tetoUSD
+		}
 		volume = cls.Volume
 		if err := j.Save(); err != nil {
 			fmt.Fprintf(stderr, "plan: %v\n", err)
