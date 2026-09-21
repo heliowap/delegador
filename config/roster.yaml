@@ -57,6 +57,27 @@ modelos:
         (errorKind resource_exhausted, falha em 3s). Nenhuma tarefa rodou.
         Ausência de resultado NÃO é resultado ruim — este campo existe para
         impedir que a falta de medição seja lida como medição.
+    eval_proxy:
+      # Segunda tentativa, pelo proxy local, executada pelo proprio delegador.
+      # Ver docs/evals/2026-09-21-eval-swe2-vs-glm.md
+      as_of: "2026-09-21"
+      modelo_testado: cpa-fw-glm-5.3-flash
+      resultado: inconclusivo
+      execucoes_atribuiveis: 1      # de 4 tentadas; 3 caíram por 503 do Jev
+      tarefa_13:
+        veredito: aprovado
+        custo_usd: 0.299
+        tempo_s: 430
+        alterou_teste: false        # teste do plano idêntico byte a byte
+        detalhe: >
+          Autorou internal/verify/verify.go e internal/gitx/diff.go a partir
+          do contrato, com os 4 testes do plano passando, incluindo o de
+          mutação. É a única aprovação do eval inteiro.
+      conclusivo: false
+      nota_do_eval: >
+        Uma aprovação contra uma reprovação do swe-2, em tarefas DIFERENTES e
+        de dificuldades diferentes. Isso é anedota, não medição: não sustenta
+        preferir um modelo ao outro.
     nota: >
       Primeira escolha da cascata. Menor piso de tokens do roster (162, contra
       516-552 dos que passam por backend com prompt injetado) e custo por
@@ -220,6 +241,24 @@ modelos:
         Sem o braço do GLM, não houve confronto. Não use estes números para
         escolher padrão de cascata — eles dizem o que o swe-2-max fez sozinho,
         não que ele é melhor ou pior que o glm.
+    eval_proxy:
+      # Segunda tentativa, pelo proxy local (sem cota do Devin), executada
+      # pelo proprio delegador. Ver docs/evals/2026-09-21-eval-swe2-vs-glm.md
+      as_of: "2026-09-21"
+      modelo_testado: devin/swe-2
+      resultado: inconclusivo
+      execucoes_atribuiveis: 1      # de 3 tentadas; as outras 2 caíram por 503 do Jev
+      tarefa_12:
+        veredito: reprovado
+        custo_usd: 0.084
+        tempo_s: 263
+        alterou_teste: false
+        causa: >
+          Escreveu arquivos da tarefa 14 enquanto executava a 12, e foi vetado
+          por sem_escrita no turno 11. O glm cometeu o mesmo desvio de escopo
+          numa execução anterior, o que aponta para o briefing e não para o
+          modelo.
+      conclusivo: false
     nota: >
       Classificado `barato`, não `forte`. Três fontes independentes convergem:
       (1) o próprio fornecedor publica 0.273 no Terminal-Bench 4 contra 0.558
@@ -245,3 +284,9 @@ modelos:
 
       O gratuito é promocional (setembro/2026). Quando acabar, este modelo
       precisa de `custo_usd_por_mtok` real ou sai do roster.
+
+      MEDIÇÃO TENTADA DUAS VEZES E NÃO CONCLUÍDA — ver `eval` e `eval_proxy`
+      acima. A primeira caiu por cota do Devin, a segunda por instabilidade
+      do Jev. Isto está escrito para que a ausência de medição não seja lida
+      como medição pendente esquecida: ela foi tentada, custou cerca de uma
+      hora e US$ 1, e o que faltou está listado no relatório.
