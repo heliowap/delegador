@@ -48,6 +48,12 @@ func StartFakeJev(t *testing.T, overrides map[string]float64) string {
 			switch q["type"] {
 			case "choice":
 				choice, ok := choices[id]
+				if !ok && strings.HasPrefix(id, "comando_") {
+					// A conferencia de veracidade gera uma choice por
+					// comando declarado, com a posicao no id. O caminho
+					// feliz e o relatorio conferir com o trace.
+					choice, ok = "sustentado", true
+				}
 				if !ok {
 					// Pergunta nova sem resposta roteirizada: falhar alto
 					// evita que um default mudo aprove o que nao foi testado.

@@ -31,6 +31,7 @@ import (
 	"github.com/heliowap/delegador/internal/roster"
 	"github.com/heliowap/delegador/internal/route"
 	"github.com/heliowap/delegador/internal/tools"
+	"github.com/heliowap/delegador/internal/veracidade"
 	"github.com/heliowap/delegador/internal/verify"
 )
 
@@ -628,6 +629,24 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "run: noul do relatorio indisponivel: %v\n", err)
 	}
 
+	// Conferencia de veracidade: o que o relatorio AFIRMA sobre cada comando
+	// declarado contra o que o trace mostra que aconteceu. E independente da
+	// verificacao — um modelo pode acertar a correcao e relatar mal, e e o
+	// segundo sinal que interessa para decidir em quem confiar.
+	var vereditos []veracidade.Veredito
+	if out.Final != "" {
+		// askerContado ja grava no ledger; o usage devolvido seria contagem
+		// dupla.
+		vs, _, err := veracidade.Conferir(ctx,
+			askerContado{jevClient, jevLedger, "veracidade", stderr},
+			out.Final, nonEmpty(j.TestCmd, j.SuiteCmd, j.LintCmd), out.Turns)
+		if err != nil {
+			fmt.Fprintf(stderr, "run: conferencia de veracidade indisponivel: %v\n", err)
+		} else {
+			vereditos = vs
+		}
+	}
+
 	_, jevUSD, _ := jevLedger.Total()
 	execUSD, _ := execLedger.Total()
 
@@ -650,6 +669,7 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		vetoSignal(out.Veto)); aviso != "" {
 		buf.WriteString(aviso)
 	}
+	escreveVeracidade(&buf, vereditos)
 	if err := os.WriteFile(j.Path("result.txt"), buf.Bytes(), 0o644); err != nil {
 		fmt.Fprintf(stderr, "run: gravando result.txt: %v\n", err)
 	}
