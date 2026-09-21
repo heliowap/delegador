@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunDeniedCallReturnsErrorResultNotGoError(t *testing.T) {
@@ -93,6 +94,38 @@ func TestExecCapturesOutputAndExitCode(t *testing.T) {
 		Call{Name: "exec", Args: map[string]string{"command": "go version"}}, p)
 	if r.IsError || !strings.Contains(r.Output, "go1.") {
 		t.Errorf("exec: %+v", r)
+	}
+}
+
+// Comando allowlistado travado nao pode segurar o laco para sempre: o
+// teto por invocacao corta e devolve o timeout como erro de ferramenta.
+func TestExecTimeoutReturnsErrorResult(t *testing.T) {
+	p := policy(t)
+	p.AllowCommands = append(p.AllowCommands, "sleep")
+	reg := &Registry{ExecTimeout: 100 * time.Millisecond}
+	r := reg.Run(context.Background(),
+		Call{Name: "exec", Args: map[string]string{"command": "sleep 5"}}, p)
+	if !r.IsError {
+		t.Error("comando pendurado tinha que voltar erro")
+	}
+	if !strings.Contains(r.Output, "tempo limite") {
+		t.Errorf("o modelo precisa saber que foi timeout: %q", r.Output)
+	}
+}
+
+// O filho roda codigo escrito por modelo: o ambiente dele nao carrega as
+// chaves que o pai usa para assinar requisicao.
+func TestExecEnvDoesNotLeakKeys(t *testing.T) {
+	t.Setenv("TYPESAFE_API_KEY", "segredo-de-teste")
+	p := policy(t)
+	p.AllowCommands = append(p.AllowCommands, "env")
+	r := (&Registry{}).Run(context.Background(),
+		Call{Name: "exec", Args: map[string]string{"command": "env"}}, p)
+	if r.IsError {
+		t.Fatalf("env: %s", r.Output)
+	}
+	if strings.Contains(r.Output, "TYPESAFE_API_KEY") || strings.Contains(r.Output, "segredo-de-teste") {
+		t.Error("o ambiente do filho vazou a chave do pai")
 	}
 }
 

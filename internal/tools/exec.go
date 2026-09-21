@@ -12,6 +12,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/heliowap/delegador/internal/safeenv"
 )
 
 // Result é a resposta da ferramenta ao modelo. Não há campo de erro de Go:
@@ -27,17 +30,33 @@ type Registry struct {
 	// MaxOutput é o teto em bytes do texto devolvido ao modelo. Zero usa
 	// defaultMaxOutput.
 	MaxOutput int
+
+	// ExecTimeout é o teto por invocação da ferramenta exec. Zero usa
+	// defaultExecTimeout.
+	ExecTimeout time.Duration
 }
 
 // defaultMaxOutput protege a janela de contexto: um `go test` verboso ou um
 // grep largo não podem explodir a conversa.
 const defaultMaxOutput = 64 * 1024
 
+// defaultExecTimeout corta comando allowlistado travado: um teste pendurado
+// ou um build esperando lock seguraria o laço para sempre — o teto devolve
+// o timeout ao modelo como erro de ferramenta, que é a forma que ele entende.
+const defaultExecTimeout = 5 * time.Minute
+
 func (r *Registry) ceiling() int {
 	if r.MaxOutput > 0 {
 		return r.MaxOutput
 	}
 	return defaultMaxOutput
+}
+
+func (r *Registry) execTimeout() time.Duration {
+	if r.ExecTimeout > 0 {
+		return r.ExecTimeout
+	}
+	return defaultExecTimeout
 }
 
 // Run executa a chamada. Allow decide primeiro — só depois de permitida é que
@@ -60,7 +79,7 @@ func (r *Registry) Run(ctx context.Context, c Call, p Policy) Result {
 	case "grep":
 		res = grepFiles(c, p)
 	case "exec":
-		res = execCmd(ctx, c, p)
+		res = execCmd(ctx, r.execTimeout(), c, p)
 	default:
 		// Inalcançável: Allow já negou ferramenta desconhecida. Fica de cinto.
 		res = Result{Output: "ferramenta desconhecida: " + c.Name, IsError: true}
@@ -207,11 +226,16 @@ func grepFiles(c Call, p Policy) Result {
 
 // execCmd roda o comando sem shell: a allowlist já barrou metacaractere, e
 // `sh -c` reabriria o que Allow fechou. O comando falhar não esconde a saída —
-// ela volta junto com o IsError para o modelo se corrigir.
-func execCmd(ctx context.Context, c Call, p Policy) Result {
+// ela volta junto com o IsError para o modelo se corrigir. O ambiente é o
+// sanitizado: o comando roda código de modelo, que não pode herdar chave.
+func execCmd(ctx context.Context, timeout time.Duration, c Call, p Policy) Result {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	fields := strings.Fields(c.Args["command"])
 	cmd := exec.CommandContext(ctx, fields[0], fields[1:]...)
 	cmd.Dir = p.Worktree
+	cmd.Env = safeenv.List()
 
 	out, err := cmd.CombinedOutput()
 	res := Result{Output: string(out)}
@@ -220,6 +244,13 @@ func execCmd(ctx context.Context, c Call, p Policy) Result {
 			res.Output += "\n"
 		}
 		res.Output += "execução falhou: " + err.Error()
+		res.IsError = true
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		if res.Output != "" {
+			res.Output += "\n"
+		}
+		res.Output += fmt.Sprintf("execução excedeu o tempo limite de %s", timeout)
 		res.IsError = true
 	}
 	return res

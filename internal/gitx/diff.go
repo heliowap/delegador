@@ -8,11 +8,15 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/heliowap/delegador/internal/safeenv"
 )
 
 func output(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
+	// git roda hooks e textconv do repo: mesmo filho, mesmo ambiente limpo.
+	cmd.Env = safeenv.List()
 	out, err := cmd.Output()
 	return string(out), err
 }

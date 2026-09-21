@@ -2,7 +2,6 @@ package job
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -12,7 +11,7 @@ import (
 // nomeando o dono.
 func TestReacquireIdempotentRecriaERecusaAlheia(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	wt := filepath.Join(t.TempDir(), "wt")
+	wt := t.TempDir() // Create exige diretorio existente
 
 	j1, err := Create(wt)
 	if err != nil {
@@ -49,7 +48,7 @@ func TestReacquireIdempotentRecriaERecusaAlheia(t *testing.T) {
 // soltar e no-op — a trava alheia fica intacta.
 func TestReleaseNaoDerrubaTravaAlheia(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	wt := filepath.Join(t.TempDir(), "wt")
+	wt := t.TempDir() // Create exige diretorio existente
 
 	j1, err := Create(wt)
 	if err != nil {

@@ -20,7 +20,8 @@ func TestRootHonorsXDGStateHome(t *testing.T) {
 func TestCreateAndLoadRoundTrip(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	j, err := Create("/tmp/wt-a")
+	// Create exige diretorio real: a worktree e canonizada na entrada.
+	j, err := Create(t.TempDir())
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -47,26 +48,28 @@ func TestCreateAndLoadRoundTrip(t *testing.T) {
 // "nunca aponte dois agentes para a mesma pasta".
 func TestCreateRefusesSecondJobOnSameWorktree(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	wt := t.TempDir()
 
-	if _, err := Create("/tmp/wt-b"); err != nil {
+	if _, err := Create(wt); err != nil {
 		t.Fatalf("primeiro Create: %v", err)
 	}
-	if _, err := Create("/tmp/wt-b"); err == nil {
+	if _, err := Create(wt); err == nil {
 		t.Fatal("quero erro no segundo Create da mesma worktree")
 	}
 }
 
 func TestReleaseAllowsReuse(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	wt := t.TempDir()
 
-	j, err := Create("/tmp/wt-c")
+	j, err := Create(wt)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := Release(j.ID); err != nil {
 		t.Fatalf("Release: %v", err)
 	}
-	if _, err := Create("/tmp/wt-c"); err != nil {
+	if _, err := Create(wt); err != nil {
 		t.Fatalf("Create apos Release: %v", err)
 	}
 }
@@ -74,7 +77,7 @@ func TestReleaseAllowsReuse(t *testing.T) {
 func TestPathIsInsideJobDir(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	j, err := Create("/tmp/wt-d")
+	j, err := Create(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}

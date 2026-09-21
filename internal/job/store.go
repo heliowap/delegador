@@ -2,6 +2,7 @@ package job
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -106,17 +107,47 @@ func newID() string {
 	return "job-" + hex.EncodeToString(b)
 }
 
-func lockPath(root, worktree string) string {
-	sum := hex.EncodeToString([]byte(filepath.Clean(worktree)))
-	if len(sum) > 40 {
-		sum = sum[:40]
+// canonical devolve o caminho absoluto com symlinks resolvidos. A trava e
+// a politica comparam caminho por string: duas grafias da mesma pasta
+// ("/tmp/wt" vs "/private/tmp/wt", ou via symlink) tem que cair na mesma
+// worktree, senao dois jobs dividem o mesmo diretorio — o erro proibido.
+func canonical(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
 	}
-	return filepath.Join(root, ".locks", sum+".lock")
+	return filepath.EvalSymlinks(abs)
+}
+
+// lockPath e o arquivo de trava da worktree: sha256 do caminho canonico em
+// hex completo — truncar so economizaria nome a custa de colisao, e a trava
+// e a primitiva que impede dois executores na mesma pasta. O hex tambem nao
+// vaza a localizacao no nome do arquivo, como o caminho cru vazaria.
+// Worktree irresoluvel cai na grafia absoluta: Create barra esse caso antes
+// de travar; o fallback cobre chamadas diretas com path de versao antiga.
+func lockPath(root, worktree string) string {
+	canon, err := canonical(worktree)
+	if err != nil {
+		canon, _ = filepath.Abs(worktree)
+	}
+	sum := sha256.Sum256([]byte(canon))
+	return filepath.Join(root, ".locks", hex.EncodeToString(sum[:])+".lock")
 }
 
 // Create cria um job novo e trava a worktree. Duas delegacoes na mesma pasta
 // e o erro que o protocolo proibe explicitamente.
 func Create(worktree string) (*Job, error) {
+	// Canoniza primeiro e guarda a forma canonica: j.Worktree alimenta a
+	// trava, o cmd.Dir das ferramentas e a politica — uma forma so.
+	canon, err := canonical(worktree)
+	if err != nil {
+		return nil, fmt.Errorf("worktree %s nao resolve: %w", worktree, err)
+	}
+	if info, err := os.Stat(canon); err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("worktree %s nao e um diretorio existente", worktree)
+	}
+	worktree = canon
+
 	root, err := Root()
 	if err != nil {
 		return nil, err
@@ -133,7 +164,7 @@ func Create(worktree string) (*Job, error) {
 	}
 	j.dir = filepath.Join(root, j.ID)
 
-	lock := lockPath(root, worktree)
+	lock := lockPath(root, j.Worktree)
 	if err := j.Reacquire(); err != nil {
 		return nil, err
 	}

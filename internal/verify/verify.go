@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/heliowap/delegador/internal/gitx"
+	"github.com/heliowap/delegador/internal/safeenv"
 )
 
 // Config sao os comandos declarados no briefing.
@@ -80,6 +81,9 @@ func runCmd(ctx context.Context, dir, name, command string, timeout time.Duratio
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = dir
+	// O comando do briefing tambem executa codigo de modelo (teste, lint):
+	// mesmo ambiente sanitizado das ferramentas do laco.
+	cmd.Env = safeenv.List()
 	out, err := cmd.CombinedOutput()
 
 	code := 0
@@ -154,7 +158,9 @@ func mutation(ctx context.Context, dir string, cfg Config) (Step, error) {
 	// Numa linked worktree o `.git` copiado e um arquivo que resolve a copia
 	// como raiz da propria worktree: o revert fica na copia (verificado),
 	// mas o gitdir/index e compartilhado com o original — efeito cosmetico.
-	if out, err := exec.CommandContext(ctx, "cp", "-R", dir, target).CombinedOutput(); err != nil {
+	cpCmd := exec.CommandContext(ctx, "cp", "-R", dir, target)
+	cpCmd.Env = safeenv.List()
+	if out, err := cpCmd.CombinedOutput(); err != nil {
 		return Step{}, fmt.Errorf("copiando worktree: %w: %s", err, out)
 	}
 	if err := gitx.RevertNonTest(ctx, target, cfg.TestGlobs); err != nil {
