@@ -1,0 +1,6 @@
+1	findLast	title: "findLast/findLastIndex crash inside map literal expressions"
+2	WithContext	title: "WithContext doesn't work with 2 functions within 1 call"
+3	Variadic	title: "struct methods with variadic parameter fail to compile"
+4	deref	title: "Auto-dereferencing not working"
+5	matches	title: "Support matches for bytes"
+6	PredicateNode	corpo: panic "ast.Node is *ast.BinaryNode, not *ast.PredicateNode"

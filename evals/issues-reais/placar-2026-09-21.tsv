@@ -1,0 +1,10 @@
+caso	issue	modelo	veredito	escalou	turnos	exec_usd	jev_usd	seg	detalhe
+1	#950	cpa-claude-opus-5(low)	VERDE	0
+0		1.6900	0.00536	99	
+2	#823	cpa-claude-opus-5(low)	VERMELHO	0	11	3.6480	0.00756	193	cascata:  veto: teto_de_custo;
+3	#888	cpa-claude-opus-5(low)	VERDE	0	8	1.4010	0.00333	94	
+4	#836	cpa-claude-opus-5(low)	VERMELHO	0	12	2.1695	0.00639	138	cascata:  veto: sem_escrita;
+5	#685	cpa-claude-opus-5(low)	VERMELHO	0	10	1.6135	0.00314	63	cascata:  veto: sem_escrita;
+6	#857	cpa-claude-opus-5(low)	VERDE	0	5	0.2845	0.00214	52	
+5	#685	cpa-claude-opus-5(low)	VERDE	0	9	1.3152	0.00331	81	
+4	#836	cpa-claude-opus-5(low)	VERMELHO	0	9	6.7384	0.01468	220	cascata:  veto: teto_de_custo;

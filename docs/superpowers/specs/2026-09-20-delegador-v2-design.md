@@ -537,3 +537,33 @@ seção de Comandos do briefing com a mesma linha repetida; o gate
 é instrução copiável, é ruído. Vale registrar porque mostra que os gates
 pegam briefing ruim mesmo quando quem o escreveu foi o próprio autor do
 sistema.
+
+### O watchdog corta antes da cascata (medido em 2026-09-21)
+
+Oito execuções contra seis bugs reais do `expr-lang/expr`, no commit anterior
+à correção, com o teste do mantenedor como oráculo
+(`docs/evals/2026-09-21-escalada-issues-reais.md`). Três verdes, três falhas —
+e **a cascata não escalou nenhuma vez**.
+
+Não por acerto: por forma da falha. O gatilho do §6.5 é verificação vermelha
+de um resultado *entregue*, e os três fracassos pararam por veto antes disso —
+dois `sem_escrita`, um `teto_de_custo`. Cada veto, isolado, foi a decisão
+certa. Juntos mostram um acoplamento que o spec não trata:
+
+**O corte de complexidade manda bug real de compilador para o topo do roster,
+e o teto de custo é absoluto em dólares.** Rota cara mais teto fixo faz o veto
+de orçamento chegar antes de `final`. Na repetição do caso #836 o modelo
+entregou quatro arquivos com suíte e lint vermelhos e foi cortado por custo a
+caminho do relatório — o run que mais perto chegou de acionar a cascata, e o
+orçamento o interrompeu.
+
+Duas consequências para revisão futura, nenhuma implementada:
+
+- O teto deveria ser proporcional ao custo por tarefa do modelo escolhido, e
+  não um valor fixo que significa coisas diferentes em cada degrau.
+- `sem_escrita` mede ociosidade com margem menor que a variância do próprio
+  modelo: o caso #685 vetou numa execução e fechou verde em nove turnos na
+  outra, mesmo modelo e mesmo prompt.
+
+O mecanismo da cascata segue coberto só por teste unitário. Em trabalho real
+ele nunca rodou.
