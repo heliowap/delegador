@@ -34,6 +34,20 @@ type Asker interface {
 	Ask(ctx context.Context, state any, qs map[string]jev.Question) (jev.Result, error)
 }
 
+// Veredito e o que o Jev respondeu sobre uma interacao: as duas
+// probabilidades cruas, antes de qualquer corte.
+type Veredito struct{ Necessaria, Verbatim float64 }
+
+// Marcas indexa vereditos por (indice do turno, posicao da chamada). Sao
+// colhidas DURANTE o laco, no mesmo request em que o watchdog julga o turno
+// (agent.PreConfig.Marcar), e evitam a rodada inteira de requests no fim.
+type Marcas map[[2]int]Veredito
+
+// Registrar guarda o veredito de uma marca colhida no laco.
+func (m Marcas) Registrar(k agent.Marca) {
+	m[[2]int{k.Turno, k.Chamada}] = Veredito{Necessaria: k.Necessaria, Verbatim: k.Verbatim}
+}
+
 // Turns pergunta ao Jev, por interacao (chamada + resultado), se a chamada
 // e necessaria a conferencia e se o resultado precisa ficar verbatim.
 // Chamada dispensavel tira a interacao do turno — e o turno inteiro quando
@@ -41,6 +55,15 @@ type Asker interface {
 // turno com um marcador de truncamento no lugar da saida, porque truncar
 // sem declarar esconderia a perda. Nada e reescrito.
 func Turns(ctx context.Context, a Asker, tarefa string, turns []agent.Turn) ([]agent.Turn, jev.Usage, error) {
+	return TurnsCom(ctx, a, tarefa, turns, nil)
+}
+
+// TurnsCom compacta reusando os vereditos ja colhidos durante o laco. Só
+// interacao sem marca volta a perguntar — num run que correu inteiro com o
+// watchdog ligado, isso e nenhuma. Com todas as interacoes marcadas, `a`
+// pode ser nil: a compactacao deixa de depender da rede no fim do run, que
+// e onde a queda de 2026-09-21 mais doeu.
+func TurnsCom(ctx context.Context, a Asker, tarefa string, turns []agent.Turn, marcas Marcas) ([]agent.Turn, jev.Usage, error) {
 	var total jev.Usage
 	var kept []agent.Turn
 
@@ -61,27 +84,48 @@ func Turns(ctx context.Context, a Asker, tarefa string, turns []agent.Turn) ([]a
 				res = t.Results[i]
 			}
 
-			state := map[string]any{
-				"tarefa": map[string]any{"texto": tarefa},
-				"interacao": map[string]any{
-					"id":        call.Args["_id"],
-					"chamada":   callDesc(call),
-					"resultado": clipResultado(res.Output),
-				},
-			}
-			ans, err := a.Ask(ctx, state, jev.CompactionQuestions())
-			if err != nil {
-				return nil, total, fmt.Errorf("compactacao: %w", err)
-			}
-			total.InputTokens += ans.Usage.InputTokens
-			total.OutputTokens += ans.Usage.OutputTokens
+			v, marcada := marcas[[2]int{t.Index, i}]
+			if !marcada {
+				if a == nil {
+					// Sem marca e sem Asker nao ha julgamento: manter e a
+					// escolha segura. Apagar o que nao foi julgado esconderia
+					// prova sem que ninguem tivesse decidido isso.
+					calls = append(calls, call)
+					if hasRes {
+						results = append(results, res)
+					}
+					continue
+				}
+				state := map[string]any{
+					"tarefa": map[string]any{"texto": tarefa},
+					"interacao": map[string]any{
+						"id":        call.Args["_id"],
+						"chamada":   callDesc(call),
+						"resultado": clipResultado(res.Output),
+					},
+				}
+				ans, err := a.Ask(ctx, state, jev.CompactionQuestions())
+				if err != nil {
+					return nil, total, fmt.Errorf("compactacao: %w", err)
+				}
+				total.InputTokens += ans.Usage.InputTokens
+				total.OutputTokens += ans.Usage.OutputTokens
 
-			chamada, ok := ans.Answers.NoulOf("chamada_necessaria")
-			if !ok || chamada < KeepThreshold {
+				chamada, okC := ans.Answers.NoulOf("chamada_necessaria")
+				if !okC {
+					continue // delecao: a interacao sai do trace
+				}
+				verbatim, okV := ans.Answers.NoulOf("resultado_necessario_verbatim")
+				if !okV {
+					verbatim = 0
+				}
+				v = Veredito{Necessaria: chamada, Verbatim: verbatim}
+			}
+
+			if v.Necessaria < KeepThreshold {
 				continue // delecao: a interacao sai do trace
 			}
-			verbatim, ok := ans.Answers.NoulOf("resultado_necessario_verbatim")
-			if hasRes && res.Output != "" && (!ok || verbatim < KeepThreshold) {
+			if hasRes && res.Output != "" && v.Verbatim < KeepThreshold {
 				res.Output = truncMarker(res.Output)
 			}
 			calls = append(calls, call)

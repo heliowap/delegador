@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -59,6 +60,15 @@ func StartFakeJev(t *testing.T, overrides map[string]float64) string {
 				answers[id] = map[string]any{"type": "score", "score": 1.2, "confidence": 0.8}
 			default: // noul e qualquer pergunta sem tipo
 				p, ok := healthy[id]
+				if !ok {
+					// As perguntas de compactacao por turno carregam a
+					// posicao da chamada no id (chamada_3_necessaria), entao
+					// nao cabem num mapa fixo. Mantem tudo: o caminho feliz
+					// nao pode perder trace por causa do fake.
+					if strings.HasPrefix(id, "chamada_") || strings.HasPrefix(id, "resultado_") {
+						p, ok = 0.9, true
+					}
+				}
 				if !ok {
 					t.Errorf("fakejev: noul sem default: %q", id)
 				}

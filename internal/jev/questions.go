@@ -1,5 +1,7 @@
 package jev
 
+import "fmt"
+
 // As perguntas do spec §6. IDs em portugues, como especificado; o ID nao e
 // enviado ao modelo, entao cada pergunta carrega o significado inteiro no
 // texto. Cada conjunto tem fixture rotulada correspondente em evals/.
@@ -250,4 +252,59 @@ func FindingQuestions() map[string]Question {
 			},
 		},
 	}
+}
+
+// MaxChamadasPorTurno e o teto de interacoes que CompactionQuestionsFor
+// cobre num turno. Cada chamada custa duas perguntas, e perguntas comem o
+// orcamento de state (StateBudget): passar disso estreitaria a janela que o
+// watchdog usa para julgar progresso. Turno mais largo que isso cai no
+// caminho antigo, uma pergunta por interacao.
+const MaxChamadasPorTurno = 8
+
+// CompactionQuestionsFor monta as perguntas de compactacao das n primeiras
+// chamadas do turno atual, para irem no MESMO request do watchdog.
+//
+// As duas etapas julgavam o mesmo material em requests separados: o
+// watchdog mandava a janela a cada turno, a compactacao mandava interacao
+// por interacao no fim. Medido em 2026-09-21 num job de 22 turnos, eram 21
+// requests de watchdog e 29 de compactacao — 50 idas seriais a rede num run
+// de 220 segundos. Perguntas independentes sobre o mesmo state vao juntas e
+// sao avaliadas em paralelo, entao unir as duas nao custa tempo de
+// resposta, e o que era serial vira um request por turno.
+//
+// Os ids carregam a posicao porque o codigo precisa dela para casar a
+// resposta com a chamada; o modelo nunca os ve — o que localiza a interacao
+// e o caminho citado nas instrucoes.
+func CompactionQuestionsFor(n int) map[string]Question {
+	if n > MaxChamadasPorTurno {
+		n = MaxChamadasPorTurno
+	}
+	qs := make(map[string]Question, 2*n)
+	for i := 0; i < n; i++ {
+		qs[fmt.Sprintf("chamada_%d_necessaria", i)] = Noul{
+			Instructions: fmt.Sprintf(
+				"Quem for conferir se o trabalho descrito em `tarefa.texto` foi bem feito precisa "+
+					"saber que a acao em `janela.turno_atual.chamadas[%d]` aconteceu.", i),
+			Criteria: &NoulCriteria{
+				True: "A acao faz parte da prova: escreveu o teste, rodou o teste, alterou o codigo, " +
+					"ou mostrou o estado que justificou a decisao seguinte.",
+				False: "E exploracao, navegacao ou tentativa abandonada, cuja ausencia nao muda a conferencia.",
+			},
+		}
+		qs[fmt.Sprintf("resultado_%d_verbatim", i)] = Noul{
+			Instructions: fmt.Sprintf(
+				"O conteudo em `janela.turno_atual.resultados[%d]` precisa ser preservado palavra por "+
+					"palavra para que a conferencia do trabalho continue possivel.", i),
+			Criteria: &NoulCriteria{
+				True:  "Contem o dado exato que sera conferido: saida de teste, mensagem de erro, diff, valor retornado.",
+				False: "E confirmacao generica, listagem de diretorio, ou saida volumosa cujo unico conteudo util e ter dado certo.",
+			},
+		}
+	}
+	return qs
+}
+
+// IDsDaChamada devolve os ids das duas perguntas da i-esima chamada.
+func IDsDaChamada(i int) (necessaria, verbatim string) {
+	return fmt.Sprintf("chamada_%d_necessaria", i), fmt.Sprintf("resultado_%d_verbatim", i)
 }

@@ -449,7 +449,13 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		contexto          string // evidencia da falha anterior, na segunda tentativa
 	)
 
+	// As marcas de compactacao sao colhidas DURANTE o laco, no mesmo request
+	// em que o watchdog julga o turno. Resetam por tentativa: depois de uma
+	// escalada os turnos recomecam do indice zero e as marcas antigas
+	// casariam com interacoes de outro modelo.
+	var marcas compact.Marcas
 	for {
+		marcas = compact.Marcas{}
 		// O custo que o teto ve = ledger ja gravado + turnos corridos
 		// desta tentativa, recomputado a cada pre-condicao — vetar no
 		// meio do laco nao pode esperar o fim dele.
@@ -466,6 +472,7 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if j.IdleTurns > 0 {
 			preCfg.IdleTurns = j.IdleTurns
 		}
+		preCfg.Marcar = marcas.Registrar
 		pre := agent.NewPrecondition(preCfg,
 			askerContado{jevClient, jevLedger, "precondicao", stderr},
 			func() float64 {
@@ -606,8 +613,9 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	gravaTraceBruto(j.Path("turns.jsonl"), out.Turns, stderr)
 
 	turnos := out.Turns
-	if kept, _, err := compact.Turns(ctx,
-		askerContado{jevClient, jevLedger, "compactacao", stderr}, string(briefing), out.Turns); err == nil {
+	if kept, _, err := compact.TurnsCom(ctx,
+		askerContado{jevClient, jevLedger, "compactacao", stderr},
+		string(briefing), out.Turns, marcas); err == nil {
 		turnos = kept
 	} else {
 		fmt.Fprintf(stderr, "run: compactacao indisponivel, trace vai integral: %v\n", err)

@@ -46,6 +46,11 @@ type PreConfig struct {
 	// OutOfScopeAttempts é quantas tentativas de escrita fora do escopo
 	// caracterizam insistência. Uma é engano; a segunda é sintoma.
 	OutOfScopeAttempts int
+
+	// Marcar recebe o veredito de compactacao de cada chamada do turno
+	// julgado. Quando e nil, as perguntas de compactacao nao entram no
+	// request e o comportamento e o antigo.
+	Marcar func(Marca)
 }
 
 // DefaultPreConfig traz os limiares de fábrica: repetição veta na terceira
@@ -63,14 +68,21 @@ func DefaultPreConfig() PreConfig {
 	}
 }
 
+// Marca e o veredito de compactacao de UMA interacao, colhido no mesmo
+// request em que o watchdog julga o turno. O agent nao aplica corte nenhum:
+// devolve as probabilidades cruas e quem consome (internal/compact) decide,
+// para nao existirem duas verdades sobre onde fica o limiar.
+type Marca struct {
+	Turno      int     // Turn.Index
+	Chamada    int     // posicao da chamada dentro do turno
+	Necessaria float64 // noul: a acao faz parte da prova
+	Verbatim   float64 // noul: o resultado precisa ficar palavra por palavra
+}
+
 // NewPrecondition monta a pré-condição do laço. O estado das janelas
 // consecutivas mora no closure — cada Precondition conta a própria
 // sequência, sem estado global.
 func NewPrecondition(cfg PreConfig, a Asker, costSoFar func() float64) Precondition {
-	qs := map[string]jev.Question{}
-	if q, ok := jev.WatchdogQuestions()["sem_progresso"]; ok {
-		qs["sem_progresso"] = q
-	}
 	seen, consecutive := 0, 0
 
 	return func(turns []Turn) *Veto {
@@ -93,16 +105,37 @@ func NewPrecondition(cfg PreConfig, a Asker, costSoFar func() float64) Precondit
 			return v
 		}
 
-		// Semântico: só com Asker, pergunta e turno novo. A janela mínima é
-		// um turno — a pergunta compara o atual com os anteriores, e a
-		// sequência de janelas é o que exige consecutividade.
-		if a == nil || len(qs) == 0 || cfg.ConsecutiveWindows <= 0 {
-			return nil
-		}
-		if len(turns) <= seen {
+		// Semântico: UMA ida ao Jev por turno, carregando as duas decisões
+		// que olham o mesmo material. O watchdog compara o turno atual com
+		// os anteriores; a compactação julga, interação por interação, o que
+		// do turno atual precisa sobreviver no trace. Eram dois requests
+		// sobre o mesmo state — 21 de watchdog e 29 de compactação num job
+		// de 22 turnos, medido em 2026-09-21. Perguntas independentes sobre
+		// o mesmo state são avaliadas em paralelo: juntá-las não custa
+		// tempo de resposta e elimina uma ida serial à rede por interação.
+		if a == nil || len(turns) <= seen {
 			return nil
 		}
 		seen = len(turns)
+
+		vigia := cfg.ConsecutiveWindows > 0
+		qs := map[string]jev.Question{}
+		if vigia {
+			if q, ok := jev.WatchdogQuestions()["sem_progresso"]; ok {
+				qs["sem_progresso"] = q
+			}
+		}
+		atual := turns[len(turns)-1]
+		nChamadas := 0
+		if cfg.Marcar != nil {
+			nChamadas = min(len(atual.Message.ToolCalls), jev.MaxChamadasPorTurno)
+			for id, q := range jev.CompactionQuestionsFor(nChamadas) {
+				qs[id] = q
+			}
+		}
+		if len(qs) == 0 {
+			return nil
+		}
 
 		state, err := windowState(turns, qs)
 		if err != nil {
@@ -111,6 +144,24 @@ func NewPrecondition(cfg PreConfig, a Asker, costSoFar func() float64) Precondit
 		res, err := a.Ask(context.Background(), state, qs)
 		if err != nil {
 			return nil // rede fora não é evidência de nada
+		}
+
+		// As marcas saem primeiro: mesmo num turno que acabe vetado, o que
+		// já foi julgado vale, e o trace do veto é justamente o que o
+		// operador vai ler.
+		for i := 0; i < nChamadas; i++ {
+			idN, idV := jev.IDsDaChamada(i)
+			necessaria, ok := res.Answers.NoulOf(idN)
+			if !ok {
+				continue
+			}
+			verbatim, _ := res.Answers.NoulOf(idV)
+			cfg.Marcar(Marca{Turno: atual.Index, Chamada: i,
+				Necessaria: necessaria, Verbatim: verbatim})
+		}
+
+		if !vigia {
+			return nil
 		}
 		p, ok := res.Answers.NoulOf("sem_progresso")
 		if !ok {
