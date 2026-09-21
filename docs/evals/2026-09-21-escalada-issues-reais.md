@@ -5,7 +5,9 @@ commit anterior à correção, com o teste do mantenedor já no disco.
 
 ## Veredito
 
-**A cascata não escalou nenhuma vez, e o motivo não é o que eu supunha.**
+**A cascata não escalou nenhuma vez nas oito execuções — e o motivo era um
+defeito do desenho, não do modelo.** Corrigido no mesmo dia, ela disparou na
+nona (ver *Adendo*, ao fim).
 
 Não foi por o modelo ter acertado sempre: ele falhou em três dos seis casos.
 Foi porque **nenhuma falha chegou na forma que a cascata exige**. A regra do
@@ -119,19 +121,52 @@ para entender, ou tentando escrever e falhando. Agora o `turns.jsonl` guarda o
 bruto. Foi com ele que se soube que, no caso 4, o modelo começou a escrever no
 turno 10 — o veto da primeira execução cortou um turno antes disso.
 
+## Adendo: a cascata disparou (mesmo dia, depois da revisao do invariante)
+
+Com o §6.5 revisado — veto de **estagnacao** deixa de curto-circuitar e cai
+na mesma verificacao que julga qualquer entrega — a issue #685 foi repetida.
+
+```
+1a tentativa  cpa-claude-opus-5(low)   veto sem_escrita, 10 turnos, diff vazio
+              verificacao: vermelha
+escalou:      cpa-claude-opus-5(low) -> claude-fable-5-1
+              (sem_escrita e verificacao vermelha)
+2a tentativa  claude-fable-5-1         9 turnos
+              teste exit 0 | mutacao exit 1 (esperado) | suite exit 0 | lint exit 0
+relato:       3 de 3 comandos conferem com o trace
+```
+
+**Verde.** E os tres arquivos que o modelo escalado tocou — `checker/checker.go`,
+`checker/nature/nature.go`, `vm/vm.go` — sao **exatamente os tres** do commit
+`775fc3ac` do mantenedor. Conferido por fora: 51 pacotes verdes.
+
+Total do job US$ 7,05 em 156 segundos, somando as duas tentativas.
+
+Duas correcoes tiveram que entrar junto para que isso fosse possivel:
+
+- **O gatilho.** `sem_escrita` nao e o ambiente falhando: e o watchdog
+  medindo o executor empacado, que e a situacao que a cascata existe para
+  resolver. A estagnacao nao decide sozinha — ela so deixa de
+  curto-circuitar, e a verificacao continua sendo quem prova a falha.
+- **O orcamento.** O contador de custo e acumulado por job, entao a segunda
+  tentativa comecava gastando o que a primeira gastou; `MaxEscaladas: 1` era
+  promessa que o codigo nao cumpria. Cada tentativa recebe o teto de novo.
+
+Uma escalada bem-sucedida nao e uma taxa de acerto. O que ela prova e que o
+mecanismo existe fora do teste unitario, que o re-roteio troca de modelo de
+verdade e que a verificacao pos-escalada e a mesma. Quantas vezes vale a
+pena escalar continua sem medida.
+
 ## O que continua sem prova
 
-A cascata **nunca escalou em trabalho real**. O mecanismo está coberto por
-teste unitário (`TestEscalaComVerificacaoVermelha`,
-`TestNaoEscalaPorVetoDeCusto`, `TestEscalaQuandoMutacaoNaoProvaNada`) e o
-re-roteio exclui o modelo que falhou, então não repete. Mas em oito execuções
-contra bugs reais ele não teve a oportunidade de rodar.
+A cascata escalou **uma vez**. Uma amostra não diz com que frequência escalar
+compensa, nem se o degrau de 0,25 é o certo, nem o que acontece quando o
+modelo escalado também falha — `MaxEscaladas: 1` manda o caso para o humano e
+isso nunca foi exercido em trabalho real.
 
-O experimento que faltou, e seu preço: **repetir o caso 4 com o teto em US$
-15**. É o único run que chegou perto — entregou um diff de quatro arquivos com
-suíte e lint vermelhos, e parou por orçamento a caminho do `final`. Com teto
-suficiente ele termina, a verificação reprova, e a cascata escala para
-`claude-fable-5-1`. Custo estimado: US$ 8 a 15.
+O caso 4 (issue #836) continua sem resposta: ele para por **teto de custo**,
+que é orçamento nosso e por definição não escala. Ou o teto sobe, ou ele fica
+fora do alcance da cascata.
 
 ## Harness
 
