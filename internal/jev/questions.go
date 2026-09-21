@@ -49,9 +49,9 @@ func DelegabilityQuestions() map[string]Question {
 			},
 		},
 		"criterio_de_pronto": Noul{
-			Instructions: "A tarefa em `tarefa.texto` deixa claro como saber que terminou, citando teste, comando ou saida esperada.",
+			Instructions: "Julgue `tarefa.texto` E `briefing.texto` COMO UM SO ARTEFATO: e isso que quem executa vai receber. Existe ali um criterio objetivo de termino? Se a tarefa nao diz mas o briefing diz, existe. Nao julgue os dois separadamente nem exija que o criterio esteja no texto da tarefa.",
 			Criteria: &NoulCriteria{
-				True:  "Ha um criterio objetivo e verificavel: um teste que precisa passar, um comando com saida esperada, um comportamento observavel.",
+				True:  "Ha um criterio objetivo e verificavel em qualquer um dos dois textos: um teste que precisa passar, um comando com saida esperada, um comportamento observavel. Pedir para escrever um teste que exponha o defeito e depois faze-lo passar E um criterio de termino: o verde do teste e a prova.",
 				False: "O criterio e subjetivo, implicito, ou simplesmente ausente.",
 			},
 		},

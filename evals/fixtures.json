@@ -142,5 +142,49 @@
         "sem_progresso": true
       }
     }
+  ],
+  "estabilidade": [
+    {
+      "nome": "criterio_de_pronto: briefing completo supre o criterio que a tarefa omite",
+      "pergunta": "criterio_de_pronto",
+      "conjunto": "delegabilidade",
+      "tarefa": "A funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.",
+      "briefing": "# Tarefa\n\nA funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.\n\nLocalizacao: pkg/mat/soma.go:5\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nfunc Soma(a, b int) int {\n\treturn a - b\n}\n```\n\n## Ordem de trabalho\n\n1. Escreva primeiro o teste que expoe este defeito.\n2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. Cole a saida da falha no relatorio.\n3. So entao corrija.\n4. Rode de novo e confirme o verde.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/ -run TestSoma\ngo test ./...\ngo vet ./...\n```\n\n## Limites\n\n- Nao faca commit e nao faca push.\n- Nao acesse a rede.\n- Trabalhe apenas nesta worktree.\n\n## Relatorio final\n\nAo terminar, responda com: o teste que voce escreveu, a mudanca feita arquivo por arquivo, e a saida literal dos comandos que voce executou, incluindo a do vermelho inicial.\n",
+      "repeticoes": 6,
+      "esperado": {
+        "lado": true,
+        "limiar": 0.6,
+        "amplitude_maxima": 0.15
+      },
+      "nota": "ACHADO de 2026-09-21. Medi esta pergunta isolada, SEM briefing no estado: 0.130 a 0.160, estavel, reprovando 12 de 12 — e conclui que minha alegacao de oscilacao estava errada. Esta fixture, que manda o estado REAL do gate (com briefing), devolveu 0.540 a 0.610: em cima do limiar, lado errado em 2 de 6. A oscilacao era real e a causa era minha: a pergunta falava de `tarefa.texto` enquanto via tambem o briefing, e os dois discordavam. Reescrita para julgar os dois como um artefato so, que e o que o executor recebe."
+    },
+    {
+      "nome": "criterio_de_pronto aprova de forma estavel quando o criterio esta escrito",
+      "pergunta": "criterio_de_pronto",
+      "conjunto": "delegabilidade",
+      "tarefa": "A funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija. Pronto quando 'go test ./pkg/mat/ -run TestSoma' passar e 'go vet ./...' sair limpo.",
+      "briefing": "# Tarefa\n\nA funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.\n\nLocalizacao: pkg/mat/soma.go:5\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nfunc Soma(a, b int) int {\n\treturn a - b\n}\n```\n\n## Ordem de trabalho\n\n1. Escreva primeiro o teste que expoe este defeito.\n2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. Cole a saida da falha no relatorio.\n3. So entao corrija.\n4. Rode de novo e confirme o verde.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/ -run TestSoma\ngo test ./...\ngo vet ./...\n```\n\n## Limites\n\n- Nao faca commit e nao faca push.\n- Nao acesse a rede.\n- Trabalhe apenas nesta worktree.\n\n## Relatorio final\n\nAo terminar, responda com: o teste que voce escreveu, a mudanca feita arquivo por arquivo, e a saida literal dos comandos que voce executou, incluindo a do vermelho inicial.\n",
+      "repeticoes": 6,
+      "esperado": {
+        "lado": true,
+        "limiar": 0.6,
+        "amplitude_maxima": 0.15
+      },
+      "nota": "Metade discriminante do par: mesma tarefa, mais uma frase dizendo como saber que terminou. Medido 8 vezes: 0.970 em todas, amplitude ZERO. O par prova que a pergunta responde ao conteudo, nao a ruido."
+    },
+    {
+      "nome": "criterio_de_pronto reprova de forma estavel quando nem a tarefa nem o briefing dizem",
+      "pergunta": "criterio_de_pronto",
+      "conjunto": "delegabilidade",
+      "tarefa": "A listagem de pedidos esta lenta em producao. Deixe mais rapida.",
+      "briefing": "# Tarefa\n\nA listagem de pedidos esta lenta em producao. Deixe mais rapida.\n\n## Limites\n\n- Nao faca commit e nao faca push.\n",
+      "repeticoes": 6,
+      "esperado": {
+        "lado": false,
+        "limiar": 0.6,
+        "amplitude_maxima": 0.2
+      },
+      "nota": "Negativa de verdade: nenhum dos dois textos diz como saber que terminou."
+    }
   ]
 }

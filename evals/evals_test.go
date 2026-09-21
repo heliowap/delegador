@@ -36,6 +36,23 @@ type fixtureSet struct {
 			TarefaAutocontida bool `json:"tarefa_autocontida"`
 		} `json:"esperado"`
 	} `json:"autonomia"`
+	// Estabilidade mede a MESMA pergunta sobre o MESMO estado, repetida.
+	// Um gate que oscila e pior que um gate severo: ele ensina a tentar de
+	// novo em vez de corrigir, e some com a confianca no veredito.
+	Estabilidade []struct {
+		Nome       string `json:"nome"`
+		Pergunta   string `json:"pergunta"`
+		Conjunto   string `json:"conjunto"`
+		Tarefa     string `json:"tarefa"`
+		Briefing   string `json:"briefing"`
+		Repeticoes int    `json:"repeticoes"`
+		Esperado   struct {
+			Lado         bool    `json:"lado"`
+			Limiar       float64 `json:"limiar"`
+			AmplitudeMax float64 `json:"amplitude_maxima"`
+		} `json:"esperado"`
+		Nota string `json:"nota"`
+	} `json:"estabilidade"`
 	Watchdog []struct {
 		Nome     string `json:"nome"`
 		Atual    string `json:"atual"`
@@ -133,6 +150,60 @@ func TestFixtures(t *testing.T) {
 				}
 				if got := p >= 0.5; got != f.Esperado.TarefaAutocontida {
 					t.Errorf("tarefa_autocontida = %.2f, rotulo diz %v", p, f.Esperado.TarefaAutocontida)
+				}
+			})
+		}
+	})
+
+	t.Run("estabilidade", func(t *testing.T) {
+		conjuntos := map[string]map[string]jev.Question{
+			"delegabilidade": jev.DelegabilityQuestions(),
+			"briefing":       jev.BriefingQuestions(),
+			"autonomia":      jev.AutonomyQuestion(),
+		}
+		for _, f := range fx.Estabilidade {
+			t.Run(f.Nome, func(t *testing.T) {
+				conj, ok := conjuntos[f.Conjunto]
+				if !ok {
+					t.Fatalf("conjunto desconhecido: %q", f.Conjunto)
+				}
+				q, ok := conj[f.Pergunta]
+				if !ok {
+					t.Fatalf("pergunta %q ausente em %q", f.Pergunta, f.Conjunto)
+				}
+				state := map[string]any{
+					"tarefa":   map[string]any{"texto": f.Tarefa},
+					"briefing": map[string]any{"texto": f.Briefing},
+				}
+				n := f.Repeticoes
+				if n < 2 {
+					n = 5
+				}
+				menor, maior := 2.0, -1.0
+				ladoErrado := 0
+				for i := 0; i < n; i++ {
+					a := ask(t, state, map[string]jev.Question{f.Pergunta: q})
+					v, ok := a.NoulOf(f.Pergunta)
+					if !ok {
+						t.Fatalf("resposta %d sem %s", i, f.Pergunta)
+					}
+					if v < menor {
+						menor = v
+					}
+					if v > maior {
+						maior = v
+					}
+					if (v >= f.Esperado.Limiar) != f.Esperado.Lado {
+						ladoErrado++
+					}
+				}
+				if ladoErrado > 0 {
+					t.Errorf("%s caiu do lado errado do limiar %.2f em %d de %d execucoes (faixa %.3f..%.3f)",
+						f.Pergunta, f.Esperado.Limiar, ladoErrado, n, menor, maior)
+				}
+				if amp := maior - menor; amp > f.Esperado.AmplitudeMax {
+					t.Errorf("amplitude %.3f (%.3f..%.3f) acima do maximo tolerado %.3f — o gate oscila",
+						amp, menor, maior, f.Esperado.AmplitudeMax)
 				}
 			})
 		}
