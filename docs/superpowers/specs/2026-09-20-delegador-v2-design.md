@@ -133,7 +133,8 @@ com o nome do item que faltou.
 
 ### 6.2 `route` — qual modelo, decidido pela tarefa
 
-Jev responde **três perguntas** sobre o briefing, numa requisição:
+Jev responde **três perguntas** sobre o briefing numa requisição, e o gate
+(§6.1) entrega uma quarta, `tarefa_autocontida`, que a rota também consome:
 
 - Choice `dimensao_dominante`: `mecanica` | `raciocinio` | `agentica`.
   As três opções existem porque as três têm coluna de benchmark. Dimensão sem
@@ -165,6 +166,69 @@ dentro do roster**, nunca valor absoluto cruzando dimensões.
 
 Modelo sem nota de terceiro entra elegível por viabilidade e custo, marcado
 como não medido no relatório. Ausência de nota não é nota baixa.
+
+#### O piso de autocontenção
+
+Preço só pode decidir sozinho quando a tarefa está fechada. Quando
+`tarefa_autocontida` fica **abaixo de 0,625**, quem executa vai precisar
+sustentar o enquadramento por conta própria — decidir o que o briefing não
+decidiu, sem derivar para outro assunto — e aí o mais barato deixa de ser
+automaticamente o certo.
+
+Nesse caso entra um **piso adicional de `tau_bench`**, no percentil 0,50 do
+roster ou no da complexidade, o que for maior. A escolha do `tau_bench` como
+proxy não é arbitrária: ele mede uso de ferramenta em ambiente multi-turno,
+que é a coisa mais próxima de "não deriva quando a informação está no
+ambiente" que o benchmark oferece. Usar dado que existe é melhor que inventar
+um campo de robustez que ninguém mediu.
+
+Duas consequências, e as duas são deliberadas:
+
+**Modelo sem nota de terceiro sai da disputa** em tarefa ambígua. Numa tarefa
+fechada ele compete por preço como qualquer outro; numa tarefa que exige
+sustentar enquadramento, ausência de medição não vira aposta. Se for o único
+disponível, ainda assim é usado — trabalho parado é pior que trabalho feito
+por modelo imperfeito —, e o relatório diz que a escolha foi às cegas.
+
+**O piso de ambiguidade não herda o percentil da complexidade.** Uma tarefa
+simples e ambígua teria corte baixo e ficaria sem piso nenhum, e essa é
+justamente a combinação mais perigosa: parece barata e é difícil de sustentar.
+Ambiguidade é eixo próprio e tem mínimo próprio.
+
+Os dois cortes — dimensão e `tau_bench` — são calculados sobre o conjunto
+inteiro de candidatos e só então intersectados. Filtrar por um e depois
+aplicar o percentil do outro recalcula a posição dentro do subconjunto e
+exclui quem deveria passar; foi um defeito real, pego por teste.
+
+**A evidência que motivou.** O `swe-2` fica a 1–3 pontos do topo em benchmark
+de código delimitado — FrontierCode 1.1 a 50,0 contra 50,9 do Fable 5.1 — e a
+cerca de metade da distância no Terminal-Bench 4, o mais agêntico: 27,3
+contra 55,8. O número é do próprio fornecedor, contra o interesse dele. E foi
+o que se observou em uso: tanto o `swe-2` quanto o `glm` derivaram de escopo,
+escrevendo arquivos de tarefas vizinhas, quando a fronteira não estava
+explícita no briefing. Dois modelos diferentes errando igual é sinal do
+regime, não deles.
+
+#### Calibragem dos dois limiares, e por que só um é calibrável
+
+`LimiarAutocontida = 0,625` foi **medido** contra as sete fixtures rotuladas
+de `evals/`, mediana de três execuções cada: a classe `true` ficou em
+0,900–0,940 e a `false` em 0,050–0,350, um vão de 0,550. O corte é o ponto
+médio. Se houvesse que descentrar seria para cima, porque os dois erros
+custam coisas diferentes: tratar tarefa ambígua como fechada joga fora um run
+inteiro, tratar fechada como ambígua compra um modelo um pouco melhor por
+centavos.
+
+`PisoTauMinimo = 0,50` **não foi calibrado por fixture, e não dá para ser.**
+Ele não é um corte sobre resposta do Jev — é um percentil dentro do roster, e
+não existe rótulo dizendo qual percentil de tau basta. Calibrá-lo exigiria
+rodar tarefas ambíguas com modelos de tau diferente e medir onde a taxa de
+sucesso cai, experimento que a sessão de 2026-09-21 tentou e não concluiu.
+
+O que sustenta o número, então, é o **efeito verificável sobre o roster
+real**, fixado em teste: ele exclui exatamente os dois modelos de pior
+`agentic_index` — 29,0 e 41,0 — e nenhum outro. Se o roster mudar e o teste
+quebrar, o número é que precisa ser revisto.
 
 ### 6.3 `run` — o laço
 
