@@ -120,11 +120,11 @@ func RouteQuestions() map[string]Question {
 			},
 		},
 		"dimensao_dominante": Choice{
-			Instructions: "Identifique qual capacidade a tarefa em `tarefa.texto` mais exige de quem for executa-la; a dimensao escolhida define qual indice de benchmark corta o roster.",
+			Instructions: "Identifique qual capacidade a MUDANCA pedida em `tarefa.texto` mais exige de quem for executa-la. Todo briefing deste sistema traz a mesma rotina — escrever o teste, confirmar o vermelho, corrigir, confirmar o verde — e os mesmos comandos de teste e lint. Essa rotina e constante, aparece em toda tarefa e nao distingue nenhuma: ignore-a por completo e julgue apenas a natureza da alteracao de codigo que esta sendo pedida.",
 			Criteria: map[string]string{
 				"mecanica":   "Transformar codigo de forma local e ja determinada: corrigir um comparador, renomear um identificador, ajustar um formato, transcrever o trecho que o briefing descreve.",
-				"raciocinio": "Entender o problema para decidir a solucao: deduzir a causa de um sintoma, reconstruir um fluxo de dados, montar a correcao a partir de partes espalhadas.",
-				"agentica":   "Operar ferramentas em sequencia dentro de um ambiente ate terminar: rodar comando, ler a saida, decidir o proximo passo, insistir ou trocar de tatica conforme o resultado.",
+				"raciocinio": "O que falta saber esta NO CODIGO-FONTE e nos documentos, e sai lendo com atencao suficiente — ainda que a causa comece desconhecida. Entra aqui deduzir uma janela de concorrencia entre duas operacoes, reconstruir um fluxo de dados, achar a premissa errada de um algoritmo: tudo isso esta escrito em algum arquivo, mesmo que espalhado, e executar serve para confirmar a conclusao, nao para chegar nela.",
+				"agentica":   "O que falta saber NAO ESTA em arquivo nenhum: so passa a existir quando algo roda. Em que etapa um script para, o que um servico responde, qual saida um comando produz nesta maquina — nenhuma leitura de codigo revela isso, e cada execucao muda o passo seguinte. Extensao sozinha NAO e agentica: uma migracao mecanica repetida em dezenas de pontos continua mecanica, e o custo dela aparece na complexidade, nao aqui. Nao basta a tarefa pedir teste e lint: toda tarefa deste sistema pede, e isso nao distingue nenhuma.",
 			},
 		},
 		"complexidade": Score{
@@ -147,10 +147,10 @@ func RouteQuestions() map[string]Question {
 func AutonomyQuestion() map[string]Question {
 	return map[string]Question{
 		"tarefa_autocontida": Noul{
-			Instructions: "O briefing em `briefing.texto` determina o que fazer a ponto de executar a tarefa ser transcrever, sem que quem executa precise decidir no caminho.",
+			Instructions: "O briefing em `briefing.texto` fecha as DECISOES da tarefa: quem executa sabe qual e o comportamento correto e onde intervir, e o que resta e escrever o codigo que realiza isso. Escrever o teste e a correcao e execucao esperada, nao decisao em aberto — nenhum briefing deste sistema entrega o codigo pronto, e isso sozinho nao torna a tarefa aberta.",
 			Criteria: &NoulCriteria{
-				True:  "O briefing diz o que mudar e onde, com o codigo novo escrito ou descrito linha a linha e os comandos prontos para colar; quem executa so transcreve e confere o resultado.",
-				False: "O briefing aponta o defeito ou o objetivo, mas deixa a correcao em aberto: quem executa precisa entender o codigo, montar a solucao ou escolher entre caminhos possiveis.",
+				True:  "O briefing localiza o defeito e diz qual e o comportamento correto, de forma que so ha um jeito razoavel de corrigir. Quem executa escreve o teste e a correcao sem precisar escolher entre desenhos, nem descobrir qual deveria ser o resultado certo.",
+				False: "O comportamento correto ou o caminho ficam em aberto: o briefing pede um objetivo sem dizer como chegar, oferece alternativas sem decidir entre elas, ou exige investigar para descobrir a causa antes de saber o que mudar.",
 			},
 		},
 	}
