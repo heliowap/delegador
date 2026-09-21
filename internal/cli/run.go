@@ -634,13 +634,22 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if !concluido && motivoCascata != "" {
 		fmt.Fprintf(&buf, "cascata:  %s\n", motivoCascata)
 	}
+	if aviso := avisoVetoComVerde(out.Veto != nil, rep.Green(), rep.MutationProved,
+		vetoSignal(out.Veto)); aviso != "" {
+		buf.WriteString(aviso)
+	}
 	if err := os.WriteFile(j.Path("result.txt"), buf.Bytes(), 0o644); err != nil {
 		fmt.Fprintf(stderr, "run: gravando result.txt: %v\n", err)
 	}
 	_, _ = stdout.Write(buf.Bytes())
 
-	if !concluido {
-		return 1
+	return codigoDeSaida(concluido, out.Veto != nil)
+}
+
+// vetoSignal le o sinal sem exigir que o chamador cheque nil antes.
+func vetoSignal(v *agent.Veto) string {
+	if v == nil {
+		return ""
 	}
-	return 0
+	return v.Signal
 }
