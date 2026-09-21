@@ -52,7 +52,39 @@ type Asker interface {
 // NaoMedido: só vence quando nenhum medido está disponível, porque não tem
 // custo por tarefa para comparar. Corte vazio nunca é erro — se ninguém
 // passa, o melhor disponível assume e o Motivo registra.
+// Opcoes sao os ajustes de rota que nao vem da dimensao nem do percentil.
+type Opcoes struct {
+	// Autocontida e o noul tarefa_autocontida do gate: alto quando o briefing
+	// fecha as decisoes, baixo quando sobra escolha para quem executa.
+	//
+	// Abaixo de LimiarAutocontida, preco deixa de ser o unico criterio entre
+	// os baratos. A tarefa vai exigir sustentar o enquadramento sozinho, e
+	// tau_bench — uso de ferramenta em ambiente multi-turno — e o proxy mais
+	// proximo disso que o benchmark oferece. Vira piso adicional, e modelo
+	// sem nota de terceiro e preterido: em tarefa ambigua, ausencia de
+	// medicao nao vira aposta.
+	//
+	// Zero significa "nao informado" e preserva o comportamento antigo.
+	Autocontida float64
+}
+
+// LimiarAutocontida e o corte abaixo do qual a rota deixa de decidir so por
+// preco. Valor de partida, a recalibrar com evals/.
+const LimiarAutocontida = 0.50
+
+// PisoTauMinimo e o percentil MINIMO de tau_bench exigido numa tarefa pouco
+// autocontida, independente de quao baixo seja o corte de complexidade.
+// Ambiguidade e eixo proprio: uma tarefa simples e ambigua ainda exige um
+// modelo que sustente o enquadramento, e usar o percentil da complexidade
+// deixaria essa combinacao sem piso nenhum.
+const PisoTauMinimo = 0.50
+
+// Escolher mantem a assinatura original: rota sem ajuste de autocontencao.
 func Escolher(ms []roster.Model, d Dimensao, percentil float64) (Escolha, error) {
+	return EscolherCom(ms, d, percentil, Opcoes{})
+}
+
+func EscolherCom(ms []roster.Model, d Dimensao, percentil float64, opts Opcoes) (Escolha, error) {
 	if len(ms) == 0 {
 		return Escolha{}, fmt.Errorf("route: sem candidatos")
 	}
@@ -72,6 +104,45 @@ func Escolher(ms []roster.Model, d Dimensao, percentil float64) (Escolha, error)
 		}
 	}
 
+	// Tarefa com decisao em aberto: o piso de tau_bench entra, e quem nao o
+	// passa sai da disputa por preco. Aplicado ANTES do corte da dimensao,
+	// porque sustentar enquadramento e pre-requisito, nao criterio de desempate.
+	ambigua := opts.Autocontida > 0 && opts.Autocontida < LimiarAutocontida
+	var motivoAmbiguidade string
+	var pisoTau map[string]bool
+	if ambigua && len(measured) > 0 {
+		firmes := comPisoDeTau(measured, max(percentil, PisoTauMinimo))
+		switch {
+		case len(firmes) > 0:
+			// Marca quem passou em vez de reduzir `measured`: o corte da
+			// dimensao precisa ser calculado sobre o conjunto INTEIRO, senao
+			// o percentil se recalcula dentro do subconjunto e exclui quem
+			// deveria passar. Os dois cortes se intersectam no fim.
+			pisoTau = make(map[string]bool, len(firmes))
+			for _, m := range firmes {
+				pisoTau[m.ID] = true
+			}
+			motivoAmbiguidade = fmt.Sprintf(
+				"tarefa pouco autocontida (%.2f): piso de tau_bench aplicado, %d de %d candidatos medidos passaram",
+				opts.Autocontida, len(firmes), len(measured))
+			unmeasured = nil // sem nota nao compete em tarefa ambigua
+		default:
+			// Ninguem passa: nao se trava o trabalho, usa-se o melhor tau
+			// disponivel e diz-se isso em voz alta.
+			melhor := measured[0]
+			for _, m := range measured[1:] {
+				if m.Benchmark.TauBench > melhor.Benchmark.TauBench {
+					melhor = m
+				}
+			}
+			return Escolha{Modelo: melhor, Dimensao: d, Percentil: percentil,
+				Motivo: fmt.Sprintf(
+					"tarefa pouco autocontida (%.2f) e nenhum candidato passou o piso de tau_bench; "+
+						"escolhido o de maior tau (%.3f) em vez de o mais barato",
+					opts.Autocontida, melhor.Benchmark.TauBench)}, nil
+		}
+	}
+
 	// Posição i/(n-1) na ordenação crescente: o melhor está no percentil 1,
 	// o pior no 0 — o topo sempre passa qualquer corte válido.
 	sort.SliceStable(measured, func(i, j int) bool {
@@ -83,8 +154,17 @@ func Escolher(ms []roster.Model, d Dimensao, percentil float64) (Escolha, error)
 		if len(measured) > 1 {
 			pos = float64(i) / float64(len(measured)-1)
 		}
-		if pos >= percentil {
+		if pos >= percentil && (pisoTau == nil || pisoTau[m.ID]) {
 			passing = append(passing, m)
+		}
+	}
+
+	// Intersecao vazia: o piso e pre-requisito, entao vale ele sozinho.
+	if len(passing) == 0 && pisoTau != nil {
+		for _, m := range measured {
+			if pisoTau[m.ID] {
+				passing = append(passing, m)
+			}
 		}
 	}
 
@@ -95,7 +175,8 @@ func Escolher(ms []roster.Model, d Dimensao, percentil float64) (Escolha, error)
 				best = m
 			}
 		}
-		return Escolha{Modelo: best, Dimensao: d, Percentil: percentil}, nil
+		return Escolha{Modelo: best, Dimensao: d, Percentil: percentil,
+			Motivo: motivoAmbiguidade}, nil
 	}
 
 	// Ninguém passou o corte: com o corte saturado em [0,1] isso só acontece
@@ -200,4 +281,25 @@ func costMTok(m roster.Model) float64 {
 		return math.Inf(1)
 	}
 	return *m.CustoUSDPorMTok
+}
+
+// comPisoDeTau devolve os candidatos cujo tau_bench fica no percentil pedido
+// ou acima, dentro do proprio conjunto. Mesma mecanica do corte de dimensao:
+// posicao relativa, porque os indices nao sao comparaveis entre si.
+func comPisoDeTau(ms []roster.Model, percentil float64) []roster.Model {
+	ordenado := append([]roster.Model(nil), ms...)
+	sort.SliceStable(ordenado, func(i, j int) bool {
+		return ordenado[i].Benchmark.TauBench < ordenado[j].Benchmark.TauBench
+	})
+	var passa []roster.Model
+	for i, m := range ordenado {
+		pos := 1.0
+		if len(ordenado) > 1 {
+			pos = float64(i) / float64(len(ordenado)-1)
+		}
+		if pos >= percentil {
+			passa = append(passa, m)
+		}
+	}
+	return passa
 }

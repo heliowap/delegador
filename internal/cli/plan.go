@@ -196,7 +196,11 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if err := ledger.Record("rota", usage); err != nil {
 			fmt.Fprintf(stderr, "plan: gravando jev.jsonl (rota): %v\n", err)
 		}
-		escolha, err := route.Escolher(elegiveis, cls.Dimensao, cls.Percentil)
+		// A autocontencao entra na rota, nao so no relatorio: tarefa com decisao
+		// em aberto exige modelo que sustente o enquadramento, e preco deixa de
+		// ser o unico criterio entre os baratos.
+		escolha, err := route.EscolherCom(elegiveis, cls.Dimensao, cls.Percentil,
+			route.Opcoes{Autocontida: verdict.Autocontida})
 		if err != nil {
 			fmt.Fprintf(stderr, "plan: %v\n", err)
 			_ = job.Release(j.ID)
