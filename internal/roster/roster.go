@@ -61,13 +61,36 @@ type Benchmark struct {
 	PrecoSaidaUSDPorMTok   float64 `json:"preco_saida_usd_por_mtok"`
 }
 
+// ProporcaoSaidaEntrada e quanta saida um laco agentico gera por token de
+// entrada. MEDIDO em 2026-09-21 sobre 7.142.353 tokens de entrada e 93.556
+// de saida, somando as catorze execucoes do eval contra o expr-lang/expr:
+// a saida e 1,31% da entrada.
+//
+// O numero e pequeno porque o contexto e reenviado inteiro a cada turno,
+// enquanto a resposta de cada turno e uma chamada de ferramenta curta. A
+// primeira versao desta derivacao usava a media simples entre os dois
+// precos — o equivalente a supor 50% de saida — e a medicao a falsificou.
+const ProporcaoSaidaEntrada = 0.0131
+
 // TokensPorTarefa estima quantos tokens o modelo gasta para terminar uma
 // tarefa do benchmark, desfazendo o preco de dentro do custo medido.
 //
-// A divisao usa a media simples entre entrada e saida porque o benchmark
-// nao publica a proporcao entre as duas. A suposicao e grosseira, mas e a
-// MESMA para todos os modelos, e o que a rota usa e a ordem entre eles, nao
-// o valor absoluto. Zero quando falta preco: sem ele nao ha o que desfazer.
+// custo = entrada x preco_entrada + saida x preco_saida, e com
+// saida = r x entrada isso vira entrada = custo / (preco_entrada +
+// r x preco_saida). O total soma as duas pontas.
+//
+// A conta supoe que as tarefas do benchmark tem a mesma proporcao das
+// nossas. Nao da para verificar — o benchmark publica custo, nao tokens —
+// mas a suposicao agora e explicita e vem de medicao, em vez de ser um
+// 50/50 escolhido por falta de dado.
+//
+// O VALOR ABSOLUTO nao serve para prever o custo de um run: medido, o
+// opus-5 precisou de ~250k tokens onde esta conta preve ~85k, e o fable-5-1
+// de 517k a 2.064k onde ela preve ~138k. O que a rota usa e a ORDEM, e essa
+// se sustentou no unico confronto direto disponivel — a issue #685, em que
+// os dois terminaram verdes: previsto 1,62x, medido 2,07x.
+//
+// Zero quando falta preco: sem ele nao ha o que desfazer.
 func (b *Benchmark) TokensPorTarefa() float64 {
 	if b == nil || b.CustoPorTarefaUSD <= 0 {
 		return 0
@@ -76,11 +99,11 @@ func (b *Benchmark) TokensPorTarefa() float64 {
 	if saida == 0 {
 		saida = entrada
 	}
-	medio := (entrada + saida) / 2
-	if medio <= 0 {
+	efetivo := entrada + ProporcaoSaidaEntrada*saida
+	if efetivo <= 0 {
 		return 0
 	}
-	return b.CustoPorTarefaUSD / medio * 1e6
+	return b.CustoPorTarefaUSD / efetivo * 1e6 * (1 + ProporcaoSaidaEntrada)
 }
 
 // Load lê o roster YAML. O formato é fixo e raso — escalares, uma lista de

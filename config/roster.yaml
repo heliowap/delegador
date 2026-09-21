@@ -37,9 +37,26 @@
 # entrou, o que a rota persegue é qualidade e velocidade, e menos tokens
 # serve às duas. O custo é medido no fim, no relatório, como efeito.
 #
-# A diferença é material neste roster: por dólar o deepseek parece 66x
-# melhor que o opus-5; por trabalho, precisa de ~34k tokens contra ~30k.
-# O preço dizia o contrário do que a eficiência diz.
+# A diferença é material neste roster: o gemini-3-6-flash custa 3x menos por
+# tarefa que o fable-5-1 e precisa de MAIS tokens para terminar. O preço diz
+# o contrário do que a eficiência diz.
+#
+# VALIDADO PARCIALMENTE em 2026-09-21, contra catorze execuções do eval:
+#
+#   modelo          previsto   medido (só onde terminou verde)
+#   opus-5(low)        85k     ~250k  (n=5, de 50k a 320k)
+#   fable-5-1         138k     517k a 2.064k  (n=2)
+#
+# O valor absoluto é inútil para prever o custo de um run: erra de 3x a 15x,
+# e o erro não é um fator constante. O que se validou foi a ORDEM, no único
+# confronto direto disponível — a issue #685, em que os dois terminaram
+# verdes na mesma tarefa: previsto 1,62x, medido 2,07x. Mesma direção,
+# magnitude próxima.
+#
+# A derivação usa a proporção saída/entrada MEDIDA (1,31%, sobre 7,1M tokens
+# de entrada contra 93k de saída), e não uma média 50/50. A correção trocou
+# deepseek e opus de lugar na ordem; o deepseek nunca rodou neste harness,
+# então essa parte da ordem segue sem validação.
 
 versao: 1
 as_of_benchmark: "2026-09-20T00:03:27Z"

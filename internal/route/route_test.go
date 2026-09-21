@@ -99,22 +99,29 @@ func TestSemCandidatoDaErro(t *testing.T) {
 	}
 }
 
-// O caso que o preco errava. Numeros do roster de 2026-09-21: por dolar, o
-// deepseek (US$ 0,0075/tarefa) parece 66x melhor que o opus-5 (US$ 0,4930).
-// Por trabalho, o deepseek precisa de ~34k tokens para terminar e o opus de
-// ~30k — o barato por token e o mais verboso dos dois. Com os dois acima do
-// corte, o criterio antigo escolhia deepseek e o novo escolhe opus.
+// O caso que o preco erra. Numeros do roster de 2026-09-21: o
+// gemini-3-6-flash custa US$ 0,2365 por tarefa contra US$ 0,7261 do
+// fable-5-1 — tres vezes mais barato — e precisa de MAIS tokens para
+// terminar (~167k contra ~138k). Com os dois acima do corte, preco
+// escolheria gemini e trabalho escolhe fable.
+//
+// O par original desta fixture era deepseek contra opus, e ele deixou de
+// discriminar quando a derivacao de TokensPorTarefa foi corrigida com a
+// proporcao entrada/saida medida: com 1,31% de saida em vez dos 50%
+// supostos, os dois trocaram de lugar. A troca esta registrada de
+// proposito — a ordem entre esses dois nunca foi validada em execucao, e o
+// deepseek jamais rodou neste harness.
 func TestDesempateNaoEPrecoEOTrabalho(t *testing.T) {
 	dois := []roster.Model{
-		m("deepseek", 69.1, 34.3, 0.730, 0.0075, 0.11, 0.33),
-		m("opus", 78.0, 50.8, 0.792, 0.4930, 5.50, 27.50),
+		m("gemini", 69.2, 34.0, 0.730, 0.2365, 1.35, 6.75),
+		m("fable", 81.6, 53.4, 0.783, 0.7261, 5.00, 25.00),
 	}
 	e, err := Escolher(dois, Mecanica, 0)
 	if err != nil {
 		t.Fatalf("Escolher: %v", err)
 	}
-	if e.Modelo.ID != "opus" {
-		t.Errorf("ID = %q, quero opus: termina com menos tokens apesar de custar mais", e.Modelo.ID)
+	if e.Modelo.ID != "fable" {
+		t.Errorf("ID = %q, quero fable: termina com menos tokens apesar de custar mais", e.Modelo.ID)
 	}
 	if barato, caro := dois[0], dois[1]; barato.Benchmark.CustoPorTarefaUSD >= caro.Benchmark.CustoPorTarefaUSD {
 		t.Fatal("a fixture perdeu o sentido: o escolhido precisa ser o mais CARO por tarefa")
