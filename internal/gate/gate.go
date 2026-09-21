@@ -156,6 +156,7 @@ func Check(ctx context.Context, a Asker, task, briefing string, facts RepoFacts)
 func SelectEvidence(ctx context.Context, a Asker, task string, items []Evidence) ([]Evidence, jev.Usage, error) {
 	var total jev.Usage
 	var kept []Evidence
+	pontos := make([]float64, len(items))
 
 	for i := range items {
 		state := map[string]any{
@@ -173,6 +174,46 @@ func SelectEvidence(ctx context.Context, a Asker, task string, items []Evidence)
 			items[i].Kept = true
 			kept = append(kept, items[i])
 		}
+		pontos[i] = p
+	}
+
+	// Rede de seguranca: o gate de briefing REPROVA quando falta a fonte do
+	// contrato ou a localizacao do defeito, e a selecao acabou de poder jogar
+	// fora o unico item que as supre. Duas etapas minhas discordando garante
+	// reprovacao, e isso nao e julgamento — e acoplamento, e se resolve em
+	// codigo. Quando nenhum item de um tipo exigido sobreviveu, o melhor
+	// pontuado daquele tipo volta.
+	for _, tipo := range tiposExigidos {
+		if temTipo(kept, tipo) {
+			continue
+		}
+		melhor, achou := -1, false
+		for i := range items {
+			if items[i].Kind != tipo {
+				continue
+			}
+			if !achou || pontos[i] > pontos[melhor] {
+				melhor, achou = i, true
+			}
+		}
+		if achou {
+			items[melhor].Kept = true
+			kept = append(kept, items[melhor])
+		}
 	}
 	return kept, total, nil
+}
+
+// tiposExigidos sao os tipos de evidencia que alimentam secoes cujo gate
+// bloqueia: `fonte` supre cita_fonte_do_contrato, `trecho` supre
+// aponta_arquivo_linha.
+var tiposExigidos = []string{"fonte", "trecho"}
+
+func temTipo(items []Evidence, tipo string) bool {
+	for _, e := range items {
+		if e.Kind == tipo {
+			return true
+		}
+	}
+	return false
 }
