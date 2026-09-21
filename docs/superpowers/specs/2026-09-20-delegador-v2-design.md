@@ -567,3 +567,104 @@ Duas consequências para revisão futura, nenhuma implementada:
 
 O mecanismo da cascata segue coberto só por teste unitário. Em trabalho real
 ele nunca rodou.
+
+## 16. O custo sai da frente (2026-09-21)
+
+O desenho original punha preço em duas decisões: o desempate da rota era o
+menor custo por tarefa em dólar, e boa parte da justificativa das outras
+escolhas apelava a economia. Isso inverte a ordem certa.
+
+**Quem monta o roster já decidiu o orçamento** ao escolher quais modelos
+entram nele. Dentro do que entrou, a rota persegue outra coisa, e o custo é
+medido no fim — no relatório, como efeito.
+
+Os três ganhos que o projeto persegue, nesta ordem:
+
+1. **Qualidade, por visão adversarial.** Não é escolher o modelo mais
+   esperto: é ter mais de um olhar independente sobre a mesma entrega. A
+   sonda de mutação já era isso; a conferência de veracidade (§16.3) é o
+   segundo.
+2. **Velocidade de implementação.** Tempo de parede do run, não só do
+   modelo: em 2026-09-21 o Jev serial respondia por cerca de 40% dele.
+3. **Menos tokens de modelo caro.** Vale para o orquestrador — que delega
+   em vez de ler o repositório com o próprio contexto — e para o executor,
+   onde menos tokens é menos fatura e menos franquia de assinatura
+   queimada. É consequência de 1 e 2, não objetivo separado.
+
+### 16.1 O desempate da rota é trabalho, não preço
+
+Entre os que passam o corte de qualidade, vence quem termina com **menos
+tokens**. O número sai do próprio benchmark: `custo_por_tarefa_usd` dividido
+pelo preço com que ele foi medido devolve o tamanho da tarefa em tokens.
+
+Muda escolha de verdade. Por dólar, o `deepseek-v4.1-flash` (US$
+0,0075/tarefa) parece 66x melhor que o `opus-5(low)` (US$ 0,4930). Por
+trabalho, o deepseek precisa de ~34k tokens para terminar e o opus de ~30k:
+o barato por token é o mais verboso dos dois.
+
+### 16.2 Uma ida ao Jev por turno
+
+O watchdog e a compactação julgavam o mesmo material em requests separados.
+Perguntas independentes sobre o mesmo state são avaliadas em paralelo, então
+foram unidas num request por turno. Medido em dois runs reais contra o
+`expr-lang/expr`:
+
+| | requests | tokens Jev | tempo de parede |
+|---|---:|---:|---:|
+| issue #857, antes | 14 | 50.956 | 52 s |
+| issue #857, depois | 9 | 33.322 | **33 s** |
+| issue #685, antes | 24 | 74.865 | 63 s |
+| issue #685, depois | 14 | 46.596 | **37 s** |
+
+Efeito colateral que importa mais que o número: com as interações marcadas
+durante o laço, a compactação aceita `Asker` nil. Ela deixa de depender da
+rede no fim do run — que é exatamente onde a queda de 2026-09-21 doeu.
+
+### 16.3 A conferência de veracidade
+
+A verificação responde "o trabalho ficou bom?". A conferência responde "quem
+fez relata com fidelidade?". São independentes, e a segunda é o sinal que
+falta no roster para decidir em quem confiar.
+
+Casamento literal primeiro, em código: comando que o relatório cita e o trace
+não registra é fabricação, decidida sem julgamento. O que sobrevive vai num
+request só, com três saídas exclusivas — sustentado, contradito,
+sem_evidência — e confiança abaixo de 0,8 vira *incerto*, que não acusa nem
+absolve.
+
+### 16.4 A confiança deixa de ser descartada
+
+Até 2026-09-21 um `grep` por `.Confidence` fora de `internal/jev` não
+devolvia nada: o número chegava parseado e morria ali.
+
+- Dimensão escolhida abaixo de 0,6 não autoriza mais um corte no índice
+  dela. O candidato passa a precisar do corte nos **três** índices. Disparou
+  na primeira execução real em que se aplicou: *"dimensao raciocinio
+  escolhida com confianca 0.41: corte exigido nos tres indices, 2 de 5
+  passaram"*.
+- Complexidade com confiança baixa tem massa espalhada entre níveis, e a
+  média não representa nenhum: o percentil sobe para o nível seguinte. Errar
+  para cima custa tokens; errar para baixo custa o run inteiro.
+
+Nenhum dos dois limiares está calibrado. Vêm da orientação da documentação do
+Jev, e calibrá-los exige o que a §16.5 passou a guardar.
+
+### 16.5 A classificação crua vai para o disco
+
+`classificacao.json` guarda probabilidade, confiança e distribuição de cada
+pergunta da rota, mais três átomos novos de complexidade — `alcance`,
+`acoplamento`, `sutileza` — que vão no mesmo request e hoje **não decidem
+nada**.
+
+Os oito jobs de 2026-09-21 rodaram jogando esses números fora, e por isso a
+única forma de testar outro peso era reexecutar. Com o bruto no disco e o
+desfecho rotulado, mudar um peso vira uma conta sobre o que já rodou — que é
+o único caminho conhecido para calibrar `PisoTauMinimo`, declarado não
+calibrável por fixture justamente por essa falta.
+
+**Ressalva medida:** os átomos chegam com confiança baixa. Em dois jobs
+reais, `alcance` marcou 0,14 e 0,51; `acoplamento` 0,48 e 0,60; `sutileza`
+0,49 e 0,65 — contra 0,65 e 0,64 da `complexidade` que eles decompõem. O
+`alcance`, em particular, devolveu massa quase uniforme entre dois níveis.
+Ou o texto não discrimina, ou o eixo não é separável como se supôs. Antes de
+qualquer um deles pesar em decisão, isso precisa de fixture rotulada.
