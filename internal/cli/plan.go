@@ -329,8 +329,13 @@ func testesNaWorktree(dir string, globs []string) []string {
 		return nil
 	})
 	sort.Strings(achados)
+	// Ou a lista e COMPLETA, ou nao vai. Truncar em seis devolvia os seis
+	// primeiros em ordem alfabetica, e o briefing os anunciava como criterio
+	// de aceite: medido em 2026-09-21 num repositorio real, nenhum dos seis
+	// tinha relacao com a tarefa. Sem lista, o briefing manda o executor
+	// olhar a evidencia e o comando de teste, que apontam os certos.
 	if len(achados) > 6 {
-		achados = achados[:6]
+		return nil
 	}
 	return achados
 }

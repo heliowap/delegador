@@ -69,8 +69,12 @@ func BuildBriefing(task string, kept []Evidence, l BriefingLimits) string {
 			fmt.Fprintf(&b, "Os testes **ja estao escritos** em %s. Eles sao o criterio de aceite: "+
 				"nao os altere, nao escreva testes novos.\n\n", strings.Join(l.ArquivosDeTeste, ", "))
 		} else {
+			// Sem lista completa nao se cita arquivo: o comando de teste ja
+			// seleciona os certos, e um caminho errado manda o executor ler
+			// o teste de outra tarefa.
 			b.WriteString("Os testes **ja estao escritos** e sao o criterio de aceite: " +
-				"nao os altere, nao escreva testes novos.\n\n")
+				"nao os altere, nao escreva testes novos. O comando de teste abaixo " +
+				"seleciona exatamente os que valem; a evidencia diz quais sao.\n\n")
 		}
 		b.WriteString("1. Leia os testes para entender o contrato exigido.\n")
 		b.WriteString("2. Rode-os e **confirme o vermelho** antes de escrever a implementacao. ")

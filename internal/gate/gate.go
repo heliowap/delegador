@@ -3,6 +3,7 @@ package gate
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 
 	"github.com/heliowap/delegador/internal/jev"
@@ -201,7 +202,53 @@ func SelectEvidence(ctx context.Context, a Asker, task string, items []Evidence)
 			kept = append(kept, items[melhor])
 		}
 	}
+
+	// Segunda rede, sobre PROPRIEDADE e nao sobre tipo: aponta_arquivo_linha
+	// exige um caminho:linha apontando o defeito, e a secao que o alimenta e
+	// montada so dos trechos. Medido em 2026-09-21 na issue expr-lang/expr#950,
+	// onde havia dois trechos — o diff do teste, sem linha, e a triagem, com
+	// ela. A selecao descartou os dois, a rede de tipo resgatou o primeiro, e
+	// o gate reprovou. Ser `trecho` nao implica localizar.
+	if !temLocalizacao(kept) {
+		melhor, achou := -1, false
+		for i := range items {
+			if items[i].Kind != "trecho" || !localiza(items[i]) {
+				continue
+			}
+			if !achou || pontos[i] > pontos[melhor] {
+				melhor, achou = i, true
+			}
+		}
+		if achou {
+			if !items[melhor].Kept {
+				items[melhor].Kept = true
+				kept = append(kept, items[melhor])
+			}
+		}
+	}
 	return kept, total, nil
+}
+
+// refLocalizacao casa uma referencia caminho/arquivo.ext:linha. Conta so o
+// que tem extensao e numero: `pkg/svc` e `Fetch()` sao nome solto, que o
+// criterio do gate rejeita explicitamente.
+var refLocalizacao = regexp.MustCompile(`[\w./\\-]+\.[A-Za-z0-9]+:\d+`)
+
+// localiza diz se este item carrega um caminho:linha, na ref ou no texto.
+func localiza(e Evidence) bool {
+	return refLocalizacao.MatchString(e.Ref) || refLocalizacao.MatchString(e.Text)
+}
+
+// temLocalizacao diz se algum TRECHO mantido carrega caminho:linha. Escopo
+// no trecho de proposito: um `erro` costuma citar a linha do teste que
+// falhou, que e o sintoma, nao o lugar do defeito.
+func temLocalizacao(items []Evidence) bool {
+	for _, e := range items {
+		if e.Kind == "trecho" && localiza(e) {
+			return true
+		}
+	}
+	return false
 }
 
 // tiposExigidos sao os tipos de evidencia que alimentam secoes cujo gate

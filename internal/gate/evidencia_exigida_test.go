@@ -53,3 +53,39 @@ func TestSemItemDoTipoNaoInventa(t *testing.T) {
 		t.Errorf("quero nenhum item mantido, tenho %d", len(kept))
 	}
 }
+
+// Medido em 2026-09-21 na issue expr-lang/expr#950: havia DOIS trechos — o
+// diff do teste, sem linha, e a triagem, com caminho:linha. A selecao
+// descartou os dois, a rede resgatou o primeiro por tipo, e o gate
+// aponta_arquivo_linha reprovou a tarefa. Ser `trecho` nao implica carregar
+// localizacao; a rede precisa preservar a PROPRIEDADE, nao so o tipo.
+func TestSelecaoPreservaOTrechoQueLocaliza(t *testing.T) {
+	items := []Evidence{
+		{Kind: "fonte", Ref: "github.com/exemplo/x/issues/950", Text: "relato do usuario"},
+		{Kind: "trecho", Ref: "x_test.go", Text: "o diff do teste do mantenedor"},
+		{Kind: "trecho", Ref: "compiler/compiler.go:614", Text: "triagem: onde o identificador aparece"},
+	}
+	kept, _, err := SelectEvidence(context.Background(), descartaTudo{}, "tarefa", items)
+	if err != nil {
+		t.Fatalf("SelectEvidence: %v", err)
+	}
+	if !temLocalizacao(kept) {
+		t.Errorf("nenhum trecho mantido cita caminho:linha; aponta_arquivo_linha reprovaria.\nmantidos: %+v", kept)
+	}
+}
+
+// Quando nenhum trecho localiza, nao ha o que resgatar — a rede nao promove
+// um item que nao tem a propriedade, e o gate reprova de verdade.
+func TestSemTrechoQueLocalizaNaoPromoveNada(t *testing.T) {
+	items := []Evidence{
+		{Kind: "fonte", Ref: "issues/1", Text: "relato"},
+		{Kind: "trecho", Ref: "x_test.go", Text: "so o sintoma"},
+	}
+	kept, _, err := SelectEvidence(context.Background(), descartaTudo{}, "tarefa", items)
+	if err != nil {
+		t.Fatalf("SelectEvidence: %v", err)
+	}
+	if n := len(kept); n != 2 {
+		t.Errorf("quero os dois resgates por tipo, tenho %d: %+v", n, kept)
+	}
+}
