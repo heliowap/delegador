@@ -231,6 +231,14 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 
 	if !verdict.Delegable {
+		// O job fica gravado como trilha de auditoria da reprova — o
+		// veredito, a evidencia e o briefing que o gate leu. cancelled,
+		// nao failed: quem decidiu foi um veredito, nao uma falha de
+		// execucao — e o estado terminal tira o job da fila do run.
+		j.State = job.StateCancelled
+		if err := j.Save(); err != nil {
+			fmt.Fprintf(stderr, "plan: gravando estado cancelado: %v\n", err)
+		}
 		_ = job.Release(j.ID)
 		return ExitRejected
 	}

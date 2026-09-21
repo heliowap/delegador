@@ -9,12 +9,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/heliowap/delegador/internal/agent"
@@ -167,6 +169,55 @@ func anotaFalha(j *job.Job, format string, a ...any) {
 	_ = os.WriteFile(j.Path("result.txt"), []byte(msg), 0o644)
 }
 
+// runLockPID le o pid gravado em run.lock; 0 quando o arquivo falta ou o
+// conteudo nao e um pid — trava meio escrita ou ilegivel nao prova nada.
+func runLockPID(j *job.Job) int {
+	b, err := os.ReadFile(j.Path("run.lock"))
+	if err != nil {
+		return 0
+	}
+	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+	return pid
+}
+
+// pidVivo confere existencia sem enviar sinal: nil e processo vivo nosso,
+// EPERM e vivo de outro usuario; so ESRCH prova morto — qualquer outra
+// duvida conta como vivo, que e o lado seguro. ponytail: reuso de pid e
+// uma aresta teorica numa CLI local (a janela entre a morte do dono da
+// trava e a releitura); o upgrade seria comparar o start-time do processo.
+func pidVivo(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	err := syscall.Kill(pid, 0)
+	return err == nil || !errors.Is(err, syscall.ESRCH)
+}
+
+// acquireRunLock cria run.lock exclusivo com o nosso pid. Trava existente
+// com pid vivo recusa — um run ativo por job; com pid morto ou ilegivel e
+// velha e some. Uma retentativa cobre a corrida de a trava sumir entre o
+// exame e a criacao.
+func acquireRunLock(j *job.Job) error {
+	lock := j.Path("run.lock")
+	for range 2 {
+		f, err := os.OpenFile(lock, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err == nil {
+			_, _ = fmt.Fprintf(f, "%d", os.Getpid())
+			return f.Close()
+		}
+		if !os.IsExist(err) {
+			return err
+		}
+		if pid := runLockPID(j); pidVivo(pid) {
+			return fmt.Errorf("job %s ja tem run ativo (pid %d)", j.ID, pid)
+		}
+		if err := os.Remove(lock); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return fmt.Errorf("run.lock do job %s instavel", j.ID)
+}
+
 func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -196,10 +247,36 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return 1
 	}
+	// running num job recem-carregado so e legitimo com um executor vivo
+	// atras — a run.lock guarda o pid. Vivo: recusa, dois runs no mesmo job
+	// e duplo executor. Morto ou ausente: o run anterior morreu no meio —
+	// marca failed e segue como retomada, que e o caminho de recuperacao.
+	if j.State == job.StateRunning {
+		if pid := runLockPID(j); pidVivo(pid) {
+			fmt.Fprintf(stderr, "run: job %s ja tem run ativo (pid %d)\n", j.ID, pid)
+			return 1
+		}
+		fmt.Fprintf(stderr, "run: job %s constava running sem executor vivo; retomando como failed\n", j.ID)
+		j.State = job.StateFailed
+		j.PID = 0
+		if err := j.Save(); err != nil {
+			anotaFalha(j, "run: %v", err)
+			fmt.Fprintf(stderr, "run: %v\n", err)
+			return 1
+		}
+	}
 	// Rodavel: planned na primeira vez, failed na retomada. running pode
 	// ser um executor vivo; completed/cancelled nao tem o que rodar.
 	if j.State != job.StatePlanned && j.State != job.StateFailed {
 		fmt.Fprintf(stderr, "run: job %s esta %s; run aceita planned ou failed\n", j.ID, j.State)
+		return 1
+	}
+	// Job orfao: o plan criou o registro mas nao chegou a rotear — ou
+	// reprovou antes de gravar o modelo. Sem modelo nao ha o que executar.
+	if j.Model == "" {
+		msg := fmt.Sprintf("run: job %s sem modelo: o plan rejeitou a tarefa ou nao roteou; rode plan de novo", j.ID)
+		anotaFalha(j, "%s", msg)
+		fmt.Fprintln(stderr, msg)
 		return 1
 	}
 	// Na retomada a trava ja foi solta pelo Release terminal — readquire
@@ -218,6 +295,16 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			_ = job.Release(j.ID)
 		}
 	}()
+
+	// A trava da worktree separa jobs; a run.lock separa instancias do
+	// MESMO job — uma retomada lancada em dois terminais duplicaria o
+	// executor. Recusa e silenciosa no result.txt de proposito: quem tem
+	// o arquivo e o run ativo, nao a instancia recusada.
+	if err := acquireRunLock(j); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return 1
+	}
+	defer os.Remove(j.Path("run.lock"))
 
 	// O roster entra antes do laco: o ledger do executor precisa do preco
 	// do modelo e a cascata precisa dos elegiveis para re-rotear.
@@ -278,6 +365,10 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	// cedo (verify de infra, rota esgotada) salvaria o veto velho de novo.
 	j.CancelReason = nil
 	j.State = job.StateRunning
+	// O pid do executor vai junto do estado: a run.lock e quem autoriza a
+	// checagem de "tem run vivo", mas o job.json fica com o registro de
+	// quem rodou para a auditoria do status.
+	j.PID = os.Getpid()
 	if err := j.Save(); err != nil {
 		anotaFalha(j, "run: %v", err)
 		fmt.Fprintf(stderr, "run: %v\n", err)
