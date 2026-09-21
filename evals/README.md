@@ -44,6 +44,29 @@ Os dois casos que cobrem os nove gates de uma vez mandam uma requisição só:
 perguntas independentes sobre o mesmo estado não veem as respostas umas das
 outras.
 
+## O que foi medido, e onde fica registrado
+
+Fixture não é só rótulo: cada caso de `autonomia` carrega o valor que o Jev
+de fato respondeu, em `medido_2026_09_21`, e o bloco `_calibragem` no topo do
+`fixtures.json` guarda o resumo — método, as duas classes, o vão entre elas e
+o limiar escolhido, com a justificativa.
+
+Isso existe para que um número de limiar nunca seja um número solto. Quem
+abrir `route.LimiarAutocontida` daqui a seis meses e quiser mexer vai
+encontrar que ele saiu de sete fixtures, mediana de três execuções cada,
+classe `true` em 0,900–0,940 e `false` em 0,050–0,350 — e que o valor é o
+ponto médio do vão, descentrado para cima se precisar, porque tratar tarefa
+ambígua como fechada custa um run inteiro e o erro contrário custa centavos.
+
+O mesmo bloco registra o que **não** foi calibrado, e por quê. O
+`PisoTauMinimo` é percentil dentro do roster, não corte sobre resposta do
+Jev: não existe rótulo dizendo qual percentil de tau basta, e fabricar uma
+fixture que fingisse calibrá-lo daria ao número uma autoridade que ele não
+tem. O que o sustenta é um teste sobre o roster real, e o campo
+`o_que_sustenta` diz isso em voz alta.
+
+Medição sem procedência vira folclore em três meses. O bloco é a procedência.
+
 ## Quando um eval falha
 
 A pergunta é qual dos dois está errado — o limiar ou o texto da pergunta — e a
