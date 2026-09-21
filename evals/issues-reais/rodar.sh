@@ -22,7 +22,7 @@ for N in "$@"; do
       --test-cmd "$(sed -n 1p "$P/cmds.txt")" \
       --suite-cmd "$(sed -n 2p "$P/cmds.txt")" \
       --lint-cmd  "$(sed -n 3p "$P/cmds.txt")" \
-      --branch main --json 2>"$RUN/$N.plan.err")
+      --branch main ${TETO:+--teto-usd "$TETO"} --json 2>"$RUN/$N.plan.err")
   rc=$?
   if [ $rc -ne 0 ]; then
     MOT=$( [ $rc -eq 3 ] && echo GATE_REPROVOU || echo PLAN_ERRO )
@@ -34,7 +34,7 @@ for N in "$@"; do
   JOB=$(echo "$JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["job_id"])')
   MOD=$(echo "$JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["modelo"])')
   echo "  plan ok: job $JOB, modelo $MOD"
-  "$D" run --job "$JOB" >"$RUN/$N.result.txt" 2>"$RUN/$N.run.err"; rrc=$?
+  "$D" run --job "$JOB" ${TURNOS:+--max-turns "$TURNOS"} >"$RUN/$N.result.txt" 2>"$RUN/$N.run.err"; rrc=$?
   dt=$(( $(date +%s)-t0 ))
   R="$RUN/$N.result.txt"
   ESC=$(grep -c '^escalou:' "$R" 2>/dev/null); ESC=${ESC:-0}

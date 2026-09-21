@@ -198,6 +198,56 @@ E a conferencia de veracidade fez o que devia sem exagerar: marcou
 `go test ./...` como **inconclusiva a 0,72**, abaixo do corte de 0,8. Nao
 acusou nem absolveu.
 
+## A rota do fable, conferida com o custo medido
+
+A rota desempata por tokens por tarefa, derivados do benchmark de terceiro
+(§16.1 do spec). Catorze execuções depois, dá para conferir a derivação
+contra o que realmente aconteceu. `evals/issues-reais/medir-tokens.py`
+reproduz a conta a partir dos ledgers.
+
+**A premissa estava errada, e a medição a corrigiu.** A derivação supunha
+que o custo se divide meio a meio entre entrada e saída. Medido sobre
+7.142.353 tokens de entrada contra 93.556 de saída: **a saída é 1,31% da
+entrada**. O contexto é reenviado inteiro a cada turno; a resposta de cada
+turno é uma chamada de ferramenta curta. A conta passou a usar a proporção
+medida, e isso trocou `deepseek` e `opus` de lugar na ordem — são os dois
+únicos do roster com proporção de preço diferente. O deepseek nunca rodou
+aqui, então essa parte da ordem segue sem validação.
+
+**O valor absoluto não serve para prever o custo de um run.**
+
+| modelo | previsto | medido (só onde terminou verde) |
+|---|---:|---|
+| `opus-5(low)` | 85k | ~250k — n=5, de 50k a 320k |
+| `claude-fable-5-1` | 138k | 517k a 2.064k — n=2 |
+
+Erra de 3x a 15x, e o erro **não é fator constante**: erra mais no fable que
+no opus. Qualquer leitura do número como estimativa de conta está errada.
+
+**A ordem, que é o que a rota usa, se sustentou.** Há exatamente um confronto
+direto: a issue #685, em que os dois modelos terminaram verdes na **mesma
+tarefa**.
+
+| | tokens | US$ | turnos |
+|---|---:|---:|---:|
+| `opus-5(low)` | 249.846 | 1,32 | 11 |
+| `claude-fable-5-1` | 517.138 | 5,43 | 12 |
+
+Razão prevista pelo roster **1,62x**; razão medida **2,07x**. Mesma direção,
+magnitude próxima. A escolha da rota — opus primeiro — estava certa nas duas
+moedas: menos tokens e quatro vezes mais barato, para o mesmo resultado
+verde.
+
+Isso também esclarece o que a escalada é e o que não é. O fable não foi
+chamado por ser mais eficiente: ele é o **menos** eficiente dos dois, por
+turno e no total. Foi chamado porque o opus não terminou.
+
+**A ressalva que sobra:** n=1 no confronto direto, e as duas tarefas que o
+fable resolveu são justamente as que o opus não resolveu. A cascata só lhe
+manda o que é difícil, então a média dele é de tarefas difíceis por
+construção. A média por modelo neste eval não é comparável; só o par da #685
+é.
+
 ## O que continua sem prova
 
 A cascata escalou **uma vez**. Uma amostra não diz com que frequência escalar
