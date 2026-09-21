@@ -601,6 +601,10 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	// e a entrega sob julgamento; a tentativa anterior fica registrada nos
 	// verify-*.json e na linha de escalada. Jev fora degrada para o trace
 	// integral: o relatorio nao pode morrer com a rede.
+	// O bruto vai para o disco ANTES da compactacao: e o unico registro que
+	// responde por que um run vetado parou.
+	gravaTraceBruto(j.Path("turns.jsonl"), out.Turns, stderr)
+
 	turnos := out.Turns
 	if kept, _, err := compact.Turns(ctx,
 		askerContado{jevClient, jevLedger, "compactacao", stderr}, string(briefing), out.Turns); err == nil {
