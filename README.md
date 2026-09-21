@@ -91,6 +91,12 @@ vez de só dizer que nenhum serve.
 - [Evals](https://github.com/heliowap/delegador/blob/v2/base/evals/README.md) — fixtures de calibragem e de estabilidade
 - [Design v1](docs/superpowers/specs/2026-09-20-devin-plugin-cc-design.md) e [plano v1](docs/superpowers/plans/2026-09-20-devin-plugin-cc.md) — supersedidos; embrulhavam o `devin` CLI
 
+## Licença
+
+[MIT](LICENSE). Use, modifique e redistribua à vontade; a única obrigação é
+manter o aviso de copyright. Sem garantia — e vale ler a seção abaixo antes
+de confiar nisto em trabalho que importe.
+
 ## Uma nota sobre o método
 
 Três defeitos sérios deste projeto foram encontrados **atacando a própria
