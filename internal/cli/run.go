@@ -279,6 +279,8 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		jobID    = fs.String("job", "", "id do job planejado")
 		rosterF  = fs.String("roster", "", "caminho do roster.yaml (padrao: DELEGADOR_ROSTER ou o do modulo delegador)")
 		maxTurns = fs.Int("max-turns", runMaxTurns, "teto de turnos do laco por tentativa")
+		maxEsc   = fs.Int("max-escaladas", -1,
+			"teto de escaladas da cascata; 0 desliga, -1 usa o padrao")
 	)
 	if err := fs.Parse(args); err != nil {
 		return ExitUsage
@@ -521,7 +523,14 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 		guardaVerify(j, rep, stderr)
 
-		d := cascade.Avaliar(out, rep, j.Escaladas, cascade.DefaultConfig())
+		// Teto de escaladas explicito serve a quem esta MEDINDO um modelo:
+		// com 0, a cascata nao o resgata, e o resultado do run e o resultado
+		// dele. Fora disso vale o padrao do spec.
+		cascCfg := cascade.DefaultConfig()
+		if *maxEsc >= 0 {
+			cascCfg.MaxEscaladas = *maxEsc
+		}
+		d := cascade.Avaliar(out, rep, j.Escaladas, cascCfg)
 		if !d.Escala {
 			motivoCascata = d.Motivo
 			break
