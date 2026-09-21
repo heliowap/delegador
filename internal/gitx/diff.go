@@ -23,18 +23,41 @@ func output(ctx context.Context, dir string, args ...string) (string, error) {
 
 // Diff devolve o diff completo da worktree, incluindo arquivos novos.
 func Diff(ctx context.Context, dir string) (string, error) {
-	if _, err := output(ctx, dir, "add", "-AN"); err != nil {
-		return "", fmt.Errorf("git add -AN: %w", err)
+	return comIndiceRestaurado(ctx, dir, func() (string, error) {
+		return output(ctx, dir, "diff")
+	})
+}
+
+// comIndiceRestaurado roda fn depois de `git add -AN`, que e o que faz arquivo
+// novo aparecer no diff, e desfaz o efeito no indice quando nada estava
+// staged antes. Sem isso o companion deixa o repositorio do usuario alterado:
+// arquivo em intent-to-add nao e removido por `git clean` e e TRUNCADO por
+// `git checkout -- .`, o que ja apagou trabalho numa medicao real.
+func comIndiceRestaurado[T any](ctx context.Context, dir string, fn func() (T, error)) (T, error) {
+	var zero T
+	antes, err := output(ctx, dir, "diff", "--cached", "--name-only")
+	if err != nil {
+		return zero, err
 	}
-	return output(ctx, dir, "diff")
+	limpo := strings.TrimSpace(antes) == ""
+
+	if _, err := output(ctx, dir, "add", "-AN"); err != nil {
+		return zero, fmt.Errorf("git add -AN: %w", err)
+	}
+	v, err := fn()
+	if limpo {
+		// So desfaz quando nada estava staged: havia trabalho no indice, ele
+		// e de outra pessoa e nao se mexe.
+		_, _ = output(ctx, dir, "reset", "-q")
+	}
+	return v, err
 }
 
 // DiffStat resume o diff em numeros.
 func DiffStat(ctx context.Context, dir string) (int, int, int, error) {
-	if _, err := output(ctx, dir, "add", "-AN"); err != nil {
-		return 0, 0, 0, err
-	}
-	out, err := output(ctx, dir, "diff", "--numstat")
+	out, err := comIndiceRestaurado(ctx, dir, func() (string, error) {
+		return output(ctx, dir, "diff", "--numstat")
+	})
 	if err != nil {
 		return 0, 0, 0, err
 	}
