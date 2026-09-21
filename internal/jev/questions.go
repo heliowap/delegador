@@ -77,10 +77,10 @@ func BriefingQuestions() map[string]Question {
 			},
 		},
 		"pede_teste_antes_da_correcao": Noul{
-			Instructions: "O briefing manda escrever o teste antes de corrigir e manda confirmar que ele falha antes da correcao.",
+			Instructions: "O briefing garante que o teste prove a correcao, exigindo ver o vermelho ANTES de escrever o codigo de producao. O que importa e a ordem, nao quem escreveu o teste: um briefing onde os testes ja estao no disco e que manda roda-los e confirmar a falha antes de implementar cumpre isso tanto quanto um que manda escrever o teste primeiro.",
 			Criteria: &NoulCriteria{
-				True:  "As duas coisas estao pedidas: escrever o teste primeiro, e confirmar o vermelho antes de mexer no codigo de producao.",
-				False: "Pede teste mas nao pede o vermelho, pede so a correcao, ou deixa a ordem em aberto.",
+				True:  "O briefing exige confirmar o vermelho antes de tocar no codigo de producao, em qualquer uma das duas formas: mandando escrever o teste primeiro e rodar, ou apontando testes que ja existem e mandando roda-los para ver a falha antes de implementar.",
+				False: "Nao ha exigencia de ver o vermelho antes: pede so a correcao, pede teste sem pedir a falha, deixa a ordem em aberto, ou admite escrever o teste depois do codigo.",
 			},
 		},
 		"comandos_copiaveis": Noul{

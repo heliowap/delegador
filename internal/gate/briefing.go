@@ -13,6 +13,16 @@ type BriefingLimits struct {
 	VenvPath        string
 	NodeModulesPath string
 	Forbidden       []string
+
+	// TestesJaEscritos muda a ordem de trabalho. O template sempre mandava
+	// "escreva primeiro o teste", e quando os testes ja estao no disco isso
+	// contradiz o texto da tarefa — medido em 2026-09-21: o modelo obedeceu
+	// ao template, escreveu um teste novo e nunca chegou a implementacao.
+	// A disciplina do vermelho fica nos dois casos; o que muda e quem
+	// escreve o teste.
+	TestesJaEscritos bool
+	// ArquivosDeTeste sao os caminhos a citar quando TestesJaEscritos.
+	ArquivosDeTeste []string
 }
 
 // BuildBriefing monta o briefing a partir do template fixo e das evidencias
@@ -54,11 +64,26 @@ func BuildBriefing(task string, kept []Evidence, l BriefingLimits) string {
 	}
 
 	b.WriteString("## Ordem de trabalho\n\n")
-	b.WriteString("1. Escreva primeiro o teste que expoe este defeito.\n")
-	b.WriteString("2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. ")
-	b.WriteString("Cole a saida da falha no relatorio.\n")
-	b.WriteString("3. So entao corrija.\n")
-	b.WriteString("4. Rode de novo e confirme o verde.\n\n")
+	if l.TestesJaEscritos {
+		if len(l.ArquivosDeTeste) > 0 {
+			fmt.Fprintf(&b, "Os testes **ja estao escritos** em %s. Eles sao o criterio de aceite: "+
+				"nao os altere, nao escreva testes novos.\n\n", strings.Join(l.ArquivosDeTeste, ", "))
+		} else {
+			b.WriteString("Os testes **ja estao escritos** e sao o criterio de aceite: " +
+				"nao os altere, nao escreva testes novos.\n\n")
+		}
+		b.WriteString("1. Leia os testes para entender o contrato exigido.\n")
+		b.WriteString("2. Rode-os e **confirme o vermelho** antes de escrever a implementacao. ")
+		b.WriteString("Cole a saida da falha no relatorio.\n")
+		b.WriteString("3. Escreva a implementacao que os faz passar.\n")
+		b.WriteString("4. Rode de novo e confirme o verde.\n\n")
+	} else {
+		b.WriteString("1. Escreva primeiro o teste que expoe este defeito.\n")
+		b.WriteString("2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. ")
+		b.WriteString("Cole a saida da falha no relatorio.\n")
+		b.WriteString("3. So entao corrija.\n")
+		b.WriteString("4. Rode de novo e confirme o verde.\n\n")
+	}
 
 	b.WriteString("## Comandos\n\n```bash\n")
 	if l.VenvPath != "" {
@@ -88,7 +113,15 @@ func BuildBriefing(task string, kept []Evidence, l BriefingLimits) string {
 	b.WriteString("\n")
 
 	b.WriteString("## Relatorio final\n\n")
-	b.WriteString("Ao terminar, responda com: o teste que voce escreveu, ")
+	b.WriteString("Ao terminar, responda com: ")
+	if l.TestesJaEscritos {
+		// Pedir "o teste que voce escreveu" aqui contradiz o "nao escreva
+		// testes novos" da ordem de trabalho — o template falava com duas
+		// vozes, e o gate sentia a contradicao.
+		b.WriteString("quais testes passaram a valer, ")
+	} else {
+		b.WriteString("o teste que voce escreveu, ")
+	}
 	b.WriteString("a mudanca feita arquivo por arquivo, e a saida literal dos comandos que voce executou, ")
 	b.WriteString("incluindo a do vermelho inicial.\n")
 

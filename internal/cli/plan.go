@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"time"
 
 	"github.com/heliowap/delegador/internal/gate"
@@ -57,17 +58,19 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
-		task     = fs.String("task", "", "o defeito em uma frase")
-		evidence = fs.String("evidence", "", "JSONL de evidencias verbatim")
-		worktree = fs.String("worktree", "", "worktree isolada desta tarefa")
-		testCmd  = fs.String("test-cmd", "", "comando de teste, copiavel")
-		suiteCmd = fs.String("suite-cmd", "", "comando da suite do pacote tocado")
-		lintCmd  = fs.String("lint-cmd", "", "comando de lint do repositorio")
-		venv     = fs.String("venv", "", "caminho absoluto do venv a reusar")
-		nodeMods = fs.String("node-modules", "", "caminho de node_modules a reusar")
-		branch   = fs.String("branch", "", "branch da worktree, para registro")
-		rosterF  = fs.String("roster", "", "caminho do roster.yaml (padrao: o do modulo delegador)")
-		asJSON   = fs.Bool("json", false, "saida em JSON")
+		task          = fs.String("task", "", "o defeito em uma frase")
+		evidence      = fs.String("evidence", "", "JSONL de evidencias verbatim")
+		worktree      = fs.String("worktree", "", "worktree isolada desta tarefa")
+		testCmd       = fs.String("test-cmd", "", "comando de teste, copiavel")
+		suiteCmd      = fs.String("suite-cmd", "", "comando da suite do pacote tocado")
+		lintCmd       = fs.String("lint-cmd", "", "comando de lint do repositorio")
+		venv          = fs.String("venv", "", "caminho absoluto do venv a reusar")
+		nodeMods      = fs.String("node-modules", "", "caminho de node_modules a reusar")
+		branch        = fs.String("branch", "", "branch da worktree, para registro")
+		rosterF       = fs.String("roster", "", "caminho do roster.yaml (padrao: o do modulo delegador)")
+		testesProntos = fs.Bool("testes-prontos", false,
+			"os testes ja estao no disco e sao o criterio; o briefing pede implementacao, nao teste")
+		asJSON = fs.Bool("json", false, "saida em JSON")
 	)
 	var testGlobs []string
 	fs.Func("test-glob", "glob de arquivo de teste para a sonda de mutacao (repetivel)", func(s string) error {
@@ -131,6 +134,7 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	briefing := gate.BuildBriefing(*task, kept, gate.BriefingLimits{
 		TestCmd: *testCmd, SuiteCmd: *suiteCmd, LintCmd: *lintCmd,
 		VenvPath: *venv, NodeModulesPath: *nodeMods,
+		TestesJaEscritos: *testesProntos, ArquivosDeTeste: testesNaWorktree(*worktree, testGlobs),
 	})
 	if err := os.WriteFile(j.Path("briefing.md"), []byte(briefing), 0o644); err != nil {
 		fmt.Fprintf(stderr, "plan: gravando briefing: %v\n", err)
@@ -301,4 +305,32 @@ func renderPlan(w io.Writer, o planOutput) {
 		fmt.Fprintln(w, "             sem benchmark de terceiro: entrou por viabilidade e custo")
 	}
 	fmt.Fprintf(w, "briefing:    %s\n", o.Briefing)
+}
+
+// testesNaWorktree lista os arquivos de teste que casam com os globs, para o
+// briefing poder nomear o oraculo em vez de falar dele no abstrato.
+func testesNaWorktree(dir string, globs []string) []string {
+	var achados []string
+	_ = filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			if err == nil && info.IsDir() && info.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		for _, g := range globs {
+			if ok, _ := filepath.Match(g, info.Name()); ok {
+				if rel, err := filepath.Rel(dir, p); err == nil {
+					achados = append(achados, rel)
+				}
+				return nil
+			}
+		}
+		return nil
+	})
+	sort.Strings(achados)
+	if len(achados) > 6 {
+		achados = achados[:6]
+	}
+	return achados
 }

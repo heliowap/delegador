@@ -230,6 +230,20 @@
         "criterio_de_pronto": false
       },
       "nota": "Negativa de verdade: nenhum dos dois textos diz como saber que terminou."
+    },
+    {
+      "nome": "pede_teste_antes_da_correcao aceita testes ja escritos no disco",
+      "conjuntos": [
+        "briefing"
+      ],
+      "tarefa": "Implemente Arredondar em pkg/moeda/arredondar.go:10, que hoje faz panic.",
+      "briefing": "# Tarefa\n\nImplemente Arredondar em `pkg/moeda/arredondar.go:10`.\n\n## Contrato violado\n\n`docs/adr/0031.md`: valores monetarios usam arredondamento bancario (half-to-even).\n\n## Onde esta o defeito\n\n`pkg/moeda/arredondar.go:10`:\n```\nfunc Arredondar(v float64, casas int) float64 {\n\tpanic(\"nao implementado\")\n}\n```\n\n## Ordem de trabalho\n\nOs testes **ja estao escritos** em pkg/moeda/arredondar_test.go. Eles sao o criterio de aceite: nao os altere, nao escreva testes novos.\n\n1. Leia os testes para entender o contrato exigido.\n2. Rode-os e **confirme o vermelho** antes de escrever a implementacao.\n3. Escreva a implementacao que os faz passar.\n4. Rode de novo e confirme o verde.\n\n## Comandos\n\n```bash\ngo test ./pkg/moeda/ -v\ngo test ./...\ngo vet ./...\n```\n\n## Limites\n\n- Nao faca commit e nao faca push.\n- Nao acesse a rede.\n\n## Relatorio final\n\nResponda com a mudanca por arquivo e a saida literal dos comandos, incluindo a do vermelho inicial.\n",
+      "repeticoes": 4,
+      "amplitude_maxima": 0.2,
+      "esperado": {
+        "pede_teste_antes_da_correcao": true
+      },
+      "nota": "Medido em 2026-09-21: a redacao anterior exigia 'escrever o teste E confirmar o vermelho', e reprovava briefing onde os testes ja estavam no disco — que e justamente o formato mais rigoroso, porque o oraculo nao foi escrito por quem implementa. A intencao da pergunta e a ORDEM, nao a autoria do teste."
     }
   ],
   "_calibragem": {
