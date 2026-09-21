@@ -29,6 +29,10 @@ type Model struct {
 	// conta na mesma proporcao.
 	CustoSaidaUSDPorMTok *float64
 	Habilitado           bool
+	// Conta e o pote de onde este modelo e pago, resolvido do bloco
+	// `contas:` do arquivo. Zero quando o modelo nao declarou nenhuma —
+	// e conta omitida nao vira preferida, ver Conta.Ordem.
+	Conta Conta
 }
 
 // Probe é o que a sondagem mediu numa chamada mínima ao modelo. Perde
@@ -135,6 +139,14 @@ func parse(raw []byte) ([]Model, error) {
 		sec          secao
 		pularMaisQue = -1 // indent do bloco a ignorar (nota dobrada, mapa desconhecido)
 		asOfSondagem time.Time
+
+		// contas: declaradas no topo, referenciadas por nome dentro de cada
+		// modelo. Resolvidas no fim, com erro em nome desconhecido — um
+		// typo virando "conta nao declarada" em silencio mudaria a rota.
+		contas     = map[string]*Conta{}
+		emContas   bool
+		contaAtual *Conta
+		refConta   = map[int]string{} // indice do modelo -> nome declarado
 	)
 
 	for i, linha := range strings.Split(string(raw), "\n") {
@@ -161,15 +173,52 @@ func parse(raw []byte) ([]Model, error) {
 			atual = nil
 			sec = secaoNenhuma
 			k, v, _ := strings.Cut(campo, ":")
+			emContas = false
 			switch strings.TrimSpace(k) {
 			case "modelos":
 				emModelos = true
+			case "contas":
+				emContas = true
 			case "as_of_sondagem":
 				d, err := time.Parse("2006-01-02", unquote(strings.TrimSpace(v)))
 				if err != nil {
 					return nil, errf("as_of_sondagem: %v", err)
 				}
 				asOfSondagem = d
+			}
+			continue
+		}
+		if emContas {
+			chave, valor, _ := strings.Cut(campo, ":")
+			chave, valor = strings.TrimSpace(chave), strings.TrimSpace(valor)
+			if indent <= 2 {
+				c := &Conta{Nome: chave}
+				contas[chave] = c
+				contaAtual = c
+				continue
+			}
+			if contaAtual == nil {
+				return nil, errf("campo de conta fora de uma conta: %s", campo)
+			}
+			switch chave {
+			case "escassez":
+				contaAtual.Escassez = valorEscalar(valor)
+			case "aperto":
+				contaAtual.Aperto = valorEscalar(valor)
+			case "orquestrador":
+				contaAtual.Orquestrador = ehTrue(valor)
+			case "prioridade":
+				n, err := strconv.Atoi(valor)
+				if err != nil {
+					return nil, errf("prioridade: %v", err)
+				}
+				contaAtual.Prioridade = n
+			case "ate":
+				d, err := time.Parse("2006-01-02", unquote(valor))
+				if err != nil {
+					return nil, errf("ate: %v", err)
+				}
+				contaAtual.Ate = d
 			}
 			continue
 		}
@@ -204,6 +253,8 @@ func parse(raw []byte) ([]Model, error) {
 				atual.Permaslug = valorEscalar(valor)
 			case "mapeamento":
 				atual.Mapeamento = valorEscalar(valor)
+			case "conta":
+				refConta[len(ms)-1] = valorEscalar(valor)
 			case "sondado":
 				sec = secaoSondado
 			case "benchmark":
@@ -312,6 +363,18 @@ func parse(raw []byte) ([]Model, error) {
 				atual.Habilitado = ehTrue(valor)
 			}
 		}
+	}
+
+	// Resolve as contas por nome. Nome desconhecido e erro: um typo
+	// silenciosamente virando "conta nao declarada" mudaria a preferencia
+	// da rota sem ninguem ver.
+	for i, nome := range refConta {
+		c, ok := contas[nome]
+		if !ok {
+			return nil, fmt.Errorf("roster: modelo %q declara conta %q, que nao esta em `contas:`",
+				ms[i].ID, nome)
+		}
+		ms[i].Conta = *c
 	}
 
 	// A data da sondagem é do arquivo inteiro, mas só onde o modelo não

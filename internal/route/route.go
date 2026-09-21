@@ -196,9 +196,17 @@ func EscolherCom(ms []roster.Model, d Dimensao, percentil float64, opts Opcoes) 
 
 	// Posição i/(n-1) na ordenação crescente: o melhor está no percentil 1,
 	// o pior no 0 — o topo sempre passa qualquer corte válido.
+	//
+	// Calculada sobre MODELOS DISTINTOS, não sobre entradas do roster. O
+	// mesmo modelo aparece em vários canais do proxy — glm-5.3-flash está
+	// em cinco, medido em 2026-09-21 — e três entradas idênticas ocupariam
+	// três posições na distribuição, empurrando as outras para baixo e
+	// fazendo cópias do MESMO modelo caírem em lados opostos do mesmo
+	// corte. Qualidade é do modelo; canal não muda peso.
 	sort.SliceStable(measured, func(i, j int) bool {
 		return indexOf(measured[i], d) < indexOf(measured[j], d)
 	})
+	posicao := posicaoPorModelo(measured, d)
 	// Dimensao escolhida sem confianca: o corte deixa de valer so no indice
 	// dela. Se nao sabemos qual capacidade a tarefa exige, o candidato
 	// precisa estar acima da linha nos TRES indices — cortar por um eixo
@@ -224,12 +232,8 @@ func EscolherCom(ms []roster.Model, d Dimensao, percentil float64, opts Opcoes) 
 	}
 
 	var passing []roster.Model
-	for i, m := range measured {
-		pos := 1.0
-		if len(measured) > 1 {
-			pos = float64(i) / float64(len(measured)-1)
-		}
-		if pos >= percentil && (pisoTau == nil || pisoTau[m.ID]) &&
+	for _, m := range measured {
+		if posicao[chaveDoModelo(m)] >= percentil && (pisoTau == nil || pisoTau[m.ID]) &&
 			(emTodosOsEixos == nil || emTodosOsEixos[m.ID]) {
 			passing = append(passing, m)
 		}
@@ -245,9 +249,20 @@ func EscolherCom(ms []roster.Model, d Dimensao, percentil float64, opts Opcoes) 
 	}
 
 	if len(passing) > 0 {
+		// Entre os que passaram a MESMA barra de qualidade, primeiro a
+		// conta, depois o trabalho. A ordem importa: o mesmo modelo aparece
+		// em varios canais do proxy — glm-5.3-flash esta em cinco — com
+		// qualidade identica e escassez completamente diferente. Desempatar
+		// por tokens antes da conta escolheria o canal certo do modelo
+		// errado, e gastaria cota de assinatura apertada onde havia
+		// promocao sobrando.
+		//
+		// O trabalho continua desempatando DENTRO da mesma conta, que e
+		// onde ele diz algo: dois modelos do mesmo pote, o que termina com
+		// menos tokens deixa mais pote para o proximo job.
 		best := passing[0]
 		for _, m := range passing[1:] {
-			if trabalhoPorTarefa(m) < trabalhoPorTarefa(best) {
+			if melhorQue(m, best) {
 				best = m
 			}
 		}
@@ -479,4 +494,55 @@ func juntaMotivo(a, b string) string {
 		return a
 	}
 	return a + "; " + b
+}
+
+// melhorQue ordena dois candidatos que ja passaram o corte de qualidade:
+// conta primeiro, trabalho depois.
+func melhorQue(a, b roster.Model) bool {
+	if oa, ob := a.Conta.Ordem(), b.Conta.Ordem(); oa != ob {
+		return oa < ob
+	}
+	return trabalhoPorTarefa(a) < trabalhoPorTarefa(b)
+}
+
+// chaveDoModelo identifica o MODELO por trás de uma entrada do roster. O
+// permaslug é o nome do peso no benchmark de terceiro, e é o que duas
+// entradas do mesmo modelo em canais diferentes compartilham. Sem ele, a
+// entrada é o próprio modelo.
+func chaveDoModelo(m roster.Model) string {
+	if m.Permaslug != "" {
+		return m.Permaslug
+	}
+	return m.ID
+}
+
+// posicaoPorModelo devolve a posição de cada modelo distinto na ordenação
+// crescente do índice da dimensão: o melhor em 1, o pior em 0. Canais do
+// mesmo modelo recebem a mesma posição, porque têm o mesmo peso.
+func posicaoPorModelo(ms []roster.Model, d Dimensao) map[string]float64 {
+	type entrada struct {
+		chave string
+		idx   float64
+	}
+	vistos := map[string]bool{}
+	var distintos []entrada
+	for _, m := range ms {
+		k := chaveDoModelo(m)
+		if vistos[k] {
+			continue
+		}
+		vistos[k] = true
+		distintos = append(distintos, entrada{k, indexOf(m, d)})
+	}
+	sort.SliceStable(distintos, func(i, j int) bool { return distintos[i].idx < distintos[j].idx })
+
+	pos := make(map[string]float64, len(distintos))
+	for i, e := range distintos {
+		p := 1.0
+		if len(distintos) > 1 {
+			p = float64(i) / float64(len(distintos)-1)
+		}
+		pos[e.chave] = p
+	}
+	return pos
 }
