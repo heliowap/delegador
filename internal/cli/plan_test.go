@@ -7,8 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/heliowap/delegador/internal/gate"
 
 	"github.com/heliowap/delegador/internal/job"
 	"github.com/heliowap/delegador/internal/testsupport"
@@ -155,5 +158,34 @@ func TestPlanDelegableRoutesAndPersistsPolicy(t *testing.T) {
 	}
 	if j.Autocontida != 0.9 {
 		t.Errorf("Autocontida = %v, quero 0.9 (default do fake)", j.Autocontida)
+	}
+}
+
+// A reprova por autocontencao e a menos obvia da lista: nao e um item
+// faltando no briefing, e uma decisao que ninguem tomou. Sem a explicacao,
+// o operador procura o que escrever a mais quando o que falta e escolher.
+func TestReprovaPorAutocontencaoExplicaORemedio(t *testing.T) {
+	var b bytes.Buffer
+	renderPlan(&b, planOutput{Verdict: gate.Verdict{
+		Delegable: false, Missing: []string{"tarefa_autocontida"}, Autocontida: 0.11}})
+	out := b.String()
+	if !strings.Contains(out, "REPROVADO") {
+		t.Fatalf("sem o veredito: %q", out)
+	}
+	if !strings.Contains(out, "Nenhum modelo resolve isso") {
+		t.Errorf("falta dizer que trocar de modelo nao adianta: %q", out)
+	}
+	if !strings.Contains(out, "0.11") {
+		t.Errorf("o numero medido precisa aparecer: %q", out)
+	}
+}
+
+// Reprova por outro motivo nao ganha a explicacao da autocontencao.
+func TestOutraReprovaNaoGanhaAExplicacao(t *testing.T) {
+	var b bytes.Buffer
+	renderPlan(&b, planOutput{Verdict: gate.Verdict{
+		Delegable: false, Missing: []string{"aponta_arquivo_linha"}}})
+	if strings.Contains(b.String(), "Nenhum modelo resolve") {
+		t.Errorf("explicacao fora de contexto: %q", b.String())
 	}
 }

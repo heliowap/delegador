@@ -309,6 +309,20 @@ func renderPlan(w io.Writer, o planOutput) {
 	}
 	if !o.Delegable {
 		fmt.Fprintf(w, "\nREPROVADO. Corrija e rode de novo: %v\n", o.Missing)
+		// tarefa_autocontida reprovando sozinha e o caso menos obvio da
+		// lista: nao e um item faltando no briefing, e uma decisao que
+		// ninguem tomou. Sem esta linha o operador procura o que escrever
+		// a mais, quando o que falta e escolher.
+		for _, m := range o.Missing {
+			if m == "tarefa_autocontida" {
+				fmt.Fprintf(w, "\n  autocontida %.2f: as decisoes da tarefa estao em aberto.\n", o.Autocontida)
+				fmt.Fprintln(w, "  Nenhum modelo resolve isso — delegar aqui nao devolve uma resposta")
+				fmt.Fprintln(w, "  pior, devolve a resposta de outra pergunta. Feche o que ainda e")
+				fmt.Fprintln(w, "  escolha sua (qual comportamento e o certo, onde intervir) e delegue")
+				fmt.Fprintln(w, "  a execucao.")
+				break
+			}
+		}
 		return
 	}
 	fmt.Fprintf(w, "modelo:      %s (dimensao %s)\n", o.Model, o.Dimensao)

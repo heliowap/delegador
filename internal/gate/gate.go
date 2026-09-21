@@ -24,6 +24,27 @@ type Thresholds struct {
 	SingleDefect float64 // abaixo disto, avisa
 	CrossPackage float64 // acima disto, avisa
 	BriefingItem float64 // abaixo disto, reprova o item
+
+	// SelfContainedFloor e o piso de tarefa_autocontida abaixo do qual a
+	// tarefa deixa de ser delegavel — nao "delegavel com modelo melhor",
+	// nao delegavel.
+	//
+	// A rota ja tratava ambiguidade elevando o piso de tau_bench, o que
+	// supoe que existe algum modelo capaz de sustentar o enquadramento
+	// sozinho. Ha um ponto em que essa suposicao deixa de valer: quando a
+	// decisao E a entrega, delegar nao produz uma resposta pior, produz a
+	// resposta de outra pergunta. A Cognition mediu esse caso num Fusion
+	// com julgamento delegado — custo caiu 28%, score caiu de 54 para 27 —
+	// e o remedio deles e o mesmo daqui: nao delegar.
+	//
+	// NAO CALIBRADO, e a distincao importa. As sete fixtures de
+	// autocontencao rotulam "fechada" contra "aberta", nao "delegavel"
+	// contra "indelegavel": 0.25 fica abaixo do grupo rotulado aberto
+	// (0.050, 0.050, 0.080, 0.350) de forma a separar os tres mais
+	// extremos, mas nenhum rotulo diz que ESSES tres nao deviam ter sido
+	// delegados. Calibrar de verdade exige rodar tarefas ambiguas e medir
+	// onde a entrega deixa de responder a pergunta feita.
+	SelfContainedFloor float64
 }
 
 // DefaultThresholds traz os valores de partida, a recalibrar com evals/.
@@ -31,6 +52,7 @@ func DefaultThresholds() Thresholds {
 	return Thresholds{
 		DesignOpen: 0.60, Sensitive: 0.50, DoneCriteria: 0.60,
 		SingleDefect: 0.50, CrossPackage: 0.70, BriefingItem: 0.60,
+		SelfContainedFloor: 0.25,
 	}
 }
 
@@ -58,8 +80,14 @@ type Verdict struct {
 // nao esta aqui: dimensao e complexidade sao perguntas do route.Classificar,
 // que o plan chama a parte sobre o briefing aprovado.
 func Check(ctx context.Context, a Asker, task, briefing string, facts RepoFacts) (Verdict, jev.Usage, error) {
-	th := DefaultThresholds()
+	return CheckCom(ctx, a, task, briefing, facts, DefaultThresholds())
+}
 
+// CheckCom e o Check com os limiares explicitos. Existe para que uma
+// fixture possa exercer um limiar sem depender do valor de fabrica — mesma
+// convencao de route.EscolherCom.
+func CheckCom(ctx context.Context, a Asker, task, briefing string, facts RepoFacts,
+	th Thresholds) (Verdict, jev.Usage, error) {
 	state := map[string]any{
 		"tarefa":   map[string]any{"texto": task},
 		"briefing": map[string]any{"texto": briefing},
@@ -145,6 +173,14 @@ func Check(ctx context.Context, a Asker, task, briefing string, facts RepoFacts)
 
 	if p, ok := res.Answers.NoulOf("tarefa_autocontida"); ok {
 		v.Autocontida = p
+		// Abaixo do piso a tarefa nao e delegavel a modelo nenhum: o que
+		// falta nao e capacidade, e a decisao que ninguem tomou. O remedio
+		// e fechar o briefing, e por isso a reprova vem com o proprio id
+		// na lista — e o mesmo texto que precisa mudar.
+		if th.SelfContainedFloor > 0 && p < th.SelfContainedFloor {
+			v.Delegable = false
+			v.Missing = append(v.Missing, "tarefa_autocontida")
+		}
 	}
 
 	sort.Strings(v.Missing)
