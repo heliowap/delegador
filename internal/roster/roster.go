@@ -22,7 +22,12 @@ type Model struct {
 	Sondado         Probe
 	Benchmark       *Benchmark
 	CustoUSDPorMTok *float64
-	Habilitado      bool
+	// CustoSaidaUSDPorMTok e opcional: ausente, cai no preco de entrada, o
+	// que preserva o comportamento de quem nao o declarou. Existe porque
+	// saida custa de 3 a 5 vezes a entrada e um numero so subestimava a
+	// conta na mesma proporcao.
+	CustoSaidaUSDPorMTok *float64
+	Habilitado           bool
 }
 
 // Probe é o que a sondagem mediu numa chamada mínima ao modelo. Perde
@@ -231,6 +236,14 @@ func parse(raw []byte) ([]Model, error) {
 						return nil, errf("custo_usd_por_mtok: %v", err)
 					}
 					atual.CustoUSDPorMTok = &f
+				}
+			case "custo_saida_usd_por_mtok":
+				if !ehNulo(valor) {
+					f, err := strconv.ParseFloat(valor, 64)
+					if err != nil {
+						return nil, errf("custo_saida_usd_por_mtok: %v", err)
+					}
+					atual.CustoSaidaUSDPorMTok = &f
 				}
 			case "habilitado":
 				atual.Habilitado = ehTrue(valor)

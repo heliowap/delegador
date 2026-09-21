@@ -66,10 +66,14 @@ func (m askerContado) Ask(ctx context.Context, state any, qs map[string]jev.Ques
 	return res, err
 }
 
-// precosDo devolve o preco por MTok do modelo no roster, aplicado aos dois
-// lados — o roster declara um custo unico. Modelo ausente ou custo null nao
-// derruba o run: o ledger registra os tokens com preco zero e avisa no
-// stderr, porque perder o token e pior que perder o dolar.
+// precosDo devolve os precos por MTok do modelo no roster, entrada e saida
+// separadas. Saida ausente cai na entrada, preservando o comportamento de
+// quem nao a declarou — mas declarar importa: saida custa de 3 a 5 vezes a
+// entrada, e um numero so subestimava a conta na mesma proporcao.
+//
+// Modelo ausente ou custo null nao derruba o run: o ledger registra os tokens
+// com preco zero e avisa no stderr, porque perder o token e pior que perder
+// o dolar.
 func precosDo(models []roster.Model, id string, stderr io.Writer) (in, out float64) {
 	for _, m := range models {
 		if m.ID == id {
@@ -77,7 +81,11 @@ func precosDo(models []roster.Model, id string, stderr io.Writer) (in, out float
 				fmt.Fprintf(stderr, "run: %s tem custo_usd_por_mtok null; tokens contabilizados sem preco\n", id)
 				return 0, 0
 			}
-			return *m.CustoUSDPorMTok, *m.CustoUSDPorMTok
+			saida := *m.CustoUSDPorMTok
+			if m.CustoSaidaUSDPorMTok != nil {
+				saida = *m.CustoSaidaUSDPorMTok
+			}
+			return *m.CustoUSDPorMTok, saida
 		}
 	}
 	fmt.Fprintf(stderr, "run: %s nao esta no roster; tokens contabilizados sem preco\n", id)

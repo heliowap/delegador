@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,17 +48,30 @@ func TestLoadReadsRealRoster(t *testing.T) {
 }
 
 // Custo nulo nao vira zero: modelo sem custo declarado nao compete por preco.
+// REESCRITO em 2026-09-21. A versao anterior lia config/roster.yaml e
+// afirmava "nenhum tem custo preenchido, logo 0 elegiveis" — o que e um fato
+// sobre o CONTEUDO do arquivo, nao sobre o comportamento da funcao. Quando os
+// custos foram preenchidos, o teste quebrou sem que nada de logica mudasse.
+//
+// A intencao — custo nulo nao vira zero, e modelo sem custo declarado nao
+// compete — esta preservada inteira, agora sobre fixture sintetica.
 func TestElegiveisExcluiSemCusto(t *testing.T) {
-	ms, err := Load(filepath.Join("..", "..", "config", "roster.yaml"))
-	if err != nil {
-		t.Fatal(err)
+	agora := time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC)
+	custo := 0.15
+	sondado := Probe{ToolCall: true, Em: agora}
+
+	semCusto := Model{ID: "sem-custo", Habilitado: true, Sondado: sondado}
+	comCusto := Model{ID: "com-custo", Habilitado: true, Sondado: sondado, CustoUSDPorMTok: &custo}
+
+	ok, motivos := Elegiveis([]Model{semCusto, comCusto}, 30*24*time.Hour, agora)
+	if len(ok) != 1 || ok[0].ID != "com-custo" {
+		t.Errorf("elegiveis = %v; so o que declara custo deveria passar", ok)
 	}
-	ok, motivos := Elegiveis(ms, 30*24*time.Hour, time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC))
-	if len(ok) != 0 {
-		t.Errorf("nenhum tem custo preenchido; quero 0 elegiveis, tenho %d", len(ok))
+	if len(motivos) != 1 {
+		t.Fatalf("quero 1 motivo de exclusao, tenho %d: %v", len(motivos), motivos)
 	}
-	if len(motivos) != 6 {
-		t.Errorf("quero 6 motivos de exclusao, tenho %d", len(motivos))
+	if !strings.Contains(motivos[0], "sem-custo") {
+		t.Errorf("o motivo precisa nomear quem foi excluido: %q", motivos[0])
 	}
 }
 
