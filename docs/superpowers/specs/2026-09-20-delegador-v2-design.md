@@ -133,13 +133,24 @@ com o nome do item que faltou.
 
 ### 6.2 `route` — qual modelo, decidido pela tarefa
 
-Jev responde **duas perguntas** sobre o briefing, numa requisição:
+Jev responde **três perguntas** sobre o briefing, numa requisição:
 
 - Choice `dimensao_dominante`: `mecanica` | `raciocinio` | `agentica`.
   As três opções existem porque as três têm coluna de benchmark. Dimensão sem
   medida correspondente seria resposta bonita e inútil.
 - Score `complexidade` (já existe no v1): define o **percentil de corte**
   dentro do roster, não o modelo.
+- Score `volume`: quantos pontos distintos e quantos ciclos a tarefa exige.
+  **Não é dificuldade**, e os dois eixos decidem coisas diferentes: a
+  complexidade escolhe **qual** modelo, o volume escolhe **quanto** ele pode
+  gastar chegando lá. `route.OrcamentoPara` escala o teto de turnos e o teto
+  de custo exponencialmente no volume, ancorado no nível 1 — nível 0 recebe
+  metade do base, nível 3 recebe oito vezes —, com piso e teto protegendo
+  contra resposta degenerada. Medido em 2026-09-21: uma correção de uma linha
+  recebeu 15 turnos e US$ 2,53; uma migração mecânica em 31 sítios recebeu 118
+  turnos e US$ 19,59, **com o mesmo modelo e a mesma dimensão**. Antes, as
+  duas recebiam 30 turnos e US$ 5,00: a primeira desperdiçava folga e a
+  segunda morria no turno 30 com o trabalho pela metade.
 
 O código faz o resto, e é aritmética: mapeia dimensão para o índice
 (`mecanica`→`coding_index`, `raciocinio`→`intelligence_index`,
@@ -356,3 +367,23 @@ merece fixture para confirmar que o critério é esse e não agressividade.
 
 Nenhuma dessas é defeito de código: são as perguntas precisando de calibragem
 contra dados reais, que é o que `evals/` existe para fazer.
+
+### O buraco de volume, encontrado e fechado
+
+Calibrar expôs um defeito de taxonomia que o desenho não tinha visto:
+`agentica` misturava **informação que só existe executando** com **alteração
+que se espalha por muitos pontos**. Não é o mesmo eixo, e o roteamento manda
+`agentica` para `tau_bench`, que mede uso de ferramenta em ambiente
+multi-turno, não extensão. Extensão saiu da dimensão.
+
+Isso deixou um buraco: com a extensão fora da dimensão, e com a complexidade
+medindo dificuldade por mudança e não tamanho — medido, o Jev responde 0,30
+de complexidade para uma migração de 31 sítios, e está certo —, **nada no
+roteamento capturava volume**. Uma migração de dezenas de pontos e uma
+correção de uma linha recebiam o mesmo teto de turnos e de custo.
+
+Fechado pelo Score `volume` (§6.2). A prova de que os eixos ficaram separados
+são duas fixtures pareadas em `evals/`: uma com complexidade baixa e volume
+alto (a migração), outra com complexidade alta e volume baixo (a janela de
+concorrência entre cache e expiração). As duas passando significa que o
+sistema não confunde mais tamanho com dificuldade.
