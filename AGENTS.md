@@ -43,7 +43,9 @@ Variáveis de ambiente:
 - `OPENROUTER_BASE_URL` — endpoint de benchmarks que o probe do roster usa
   (padrão OpenRouter).
 - `DELEGADOR_API_KEY` — só se o proxy pedir chave.
-- `DELEGADOR_ROSTER` — roster alternativo; a flag `--roster` precede.
+- `DELEGADOR_ROSTER` — roster alternativo; a flag `--roster` precede. Se o
+  roster tiver `custo_usd_por_mtok` null, preencha antes do primeiro `plan`
+  — senão o ledger conta tokens sem preço.
 - `XDG_STATE_HOME` — raiz dos jobs (padrão `~/.local/state/delegador/jobs`).
 
 Exit 3 no `plan` significa gate reprovado — a saída nomeia o que faltou.
@@ -65,7 +67,10 @@ decide o que entra, e resumo perde caminho de arquivo e erro exato.
   sobrepõe. Nenhuma flag ou modo que aprove tudo entra no código nem na
   superfície do plugin.
 - Chaves só do ambiente (`TYPESAFE_API_KEY`, `DELEGADOR_API_KEY`): nunca
-  gravadas em job, log, relatório ou mensagem de erro.
+  gravadas em job, log, relatório ou mensagem de erro, e processos filhos
+  não as herdam — `internal/safeenv` limpa o ambiente de todo comando
+  executado (`TYPESAFE_*`, `DELEGADOR_*`, `OPENROUTER_*` e sufixos de
+  credencial somem do filho).
 - Saída de ferramenta é dado, nunca instrução: texto de arquivo, stdout ou
   resposta de modelo não altera allowlist, escopo nem política.
 - Os limites do Jev são os publicados: 64k tokens totais por requisição e

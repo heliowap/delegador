@@ -33,6 +33,26 @@ func BuildBriefing(task string, kept []Evidence, l BriefingLimits) string {
 	writeSection(&b, "## Erro observado", kept, "erro")
 	writeSection(&b, "## Comandos ja executados", kept, "comando")
 
+	// Kind fora dos quatro conhecidos nao some: a selecao ja disse que o
+	// item e necessario, e contar no EvidenceOut sem entrar no briefing
+	// perderia dado e mentiria a conta. Caindo aqui ele fica visivel.
+	known := map[string]bool{"fonte": true, "trecho": true, "erro": true, "comando": true}
+	var rest []Evidence
+	for _, e := range kept {
+		if !known[e.Kind] {
+			rest = append(rest, e)
+		}
+	}
+	if len(rest) > 0 {
+		b.WriteString("## Outras evidencias (kind nao reconhecido)\n\n")
+		for _, e := range rest {
+			if e.Ref != "" {
+				fmt.Fprintf(&b, "`%s`:\n", e.Ref)
+			}
+			fmt.Fprintf(&b, "- kind `%s`:\n```\n%s\n```\n\n", e.Kind, e.Text)
+		}
+	}
+
 	b.WriteString("## Ordem de trabalho\n\n")
 	b.WriteString("1. Escreva primeiro o teste que expoe este defeito.\n")
 	b.WriteString("2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. ")

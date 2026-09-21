@@ -75,6 +75,17 @@ func allowPath(rel string, p Policy, write bool) Decision {
 		return deny("caminho sai da worktree: %q", rel)
 	}
 
+	// .git e interno do git em qualquer nivel: hooks, config e textconv la
+	// dentro executam codigo durante o verify e persistem ataque de
+	// operador. A negação e por segmento — "a/.git/x" tambem e git interno.
+	if write {
+		for _, seg := range strings.Split(clean, string(filepath.Separator)) {
+			if seg == ".git" {
+				return deny("escrita em .git nao e permitida: %q", rel)
+			}
+		}
+	}
+
 	root, err := resolve(p.Worktree)
 	if err != nil {
 		return deny("worktree irresolúvel: %v", err)

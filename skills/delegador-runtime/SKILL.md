@@ -19,7 +19,11 @@ Como o laco funciona:
 - A permissao e uma lista em codigo, avaliada antes de cada tool call:
   escrita so dentro da worktree do job; comandos so os declarados no
   briefing; e negacoes duras que nenhuma configuracao sobrepoe — push,
-  commit, `rm -rf`, acesso a rede, credencial em argumento.
+  commit, `rm -rf`, acesso a rede, credencial em argumento. As negacoes
+  olham o argv: nao cobrem o que um comando PERMITIDO executa — codigo de
+  teste rodando dentro de `go test`, Makefile ou script tem rede e fs
+  livres; a fronteira real e a worktree, a allowlist e o ambiente sem
+  chaves que o filho recebe.
 - Recusa nao mata o laco: volta ao modelo como resultado de ferramenta, e
   ele tenta outro caminho em vez de morrer no meio.
 - O watchdog e pre-condicao, nao vigia: antes de cada turno decide se ha

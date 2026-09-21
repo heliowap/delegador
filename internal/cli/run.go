@@ -50,12 +50,18 @@ type askerContado struct {
 	a    agent.Asker
 	l    *jev.Ledger
 	kind string
+	w    io.Writer
 }
 
 func (m askerContado) Ask(ctx context.Context, state any, qs map[string]jev.Question) (jev.Result, error) {
 	res, err := m.a.Ask(ctx, state, qs)
 	if err == nil {
-		_ = m.l.Record(m.kind, res.Usage)
+		// Falha de gravacao nao pode parar o run — mas some do stderr, como
+		// o ledger do executor ja faz: auditoria que falha em silencio
+		// mente por omissao.
+		if err := m.l.Record(m.kind, res.Usage); err != nil {
+			fmt.Fprintf(m.w, "run: gravando jev.jsonl (%s): %v\n", m.kind, err)
+		}
 	}
 	return res, err
 }
@@ -394,7 +400,7 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		// meio do laco nao pode esperar o fim dele.
 		var emCurso float64
 		pre := agent.NewPrecondition(agent.DefaultPreConfig(),
-			askerContado{jevClient, jevLedger, "precondicao"},
+			askerContado{jevClient, jevLedger, "precondicao", stderr},
 			func() float64 {
 				total, _ := execLedger.Total()
 				return total + emCurso
@@ -530,14 +536,14 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	// integral: o relatorio nao pode morrer com a rede.
 	turnos := out.Turns
 	if kept, _, err := compact.Turns(ctx,
-		askerContado{jevClient, jevLedger, "compactacao"}, string(briefing), out.Turns); err == nil {
+		askerContado{jevClient, jevLedger, "compactacao", stderr}, string(briefing), out.Turns); err == nil {
 		turnos = kept
 	} else {
 		fmt.Fprintf(stderr, "run: compactacao indisponivel, trace vai integral: %v\n", err)
 	}
 	afirma := 0.0
 	if p, _, err := compact.AfirmaVerde(ctx,
-		askerContado{jevClient, jevLedger, "relatorio"}, out.Final); err == nil {
+		askerContado{jevClient, jevLedger, "relatorio", stderr}, out.Final); err == nil {
 		afirma = p
 	} else {
 		fmt.Fprintf(stderr, "run: noul do relatorio indisponivel: %v\n", err)

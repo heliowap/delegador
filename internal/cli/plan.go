@@ -119,7 +119,11 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		_ = job.Release(j.ID)
 		return 1
 	}
-	_ = ledger.Record("selecao_evidencia", usage)
+	// Gravacao de ledger falha sem parar o plan — mas avisa: auditoria que
+	// falha em silencio mente por omissao.
+	if err := ledger.Record("selecao_evidencia", usage); err != nil {
+		fmt.Fprintf(stderr, "plan: gravando jev.jsonl (selecao_evidencia): %v\n", err)
+	}
 
 	briefing := gate.BuildBriefing(*task, kept, gate.BriefingLimits{
 		TestCmd: *testCmd, SuiteCmd: *suiteCmd, LintCmd: *lintCmd,
@@ -137,7 +141,9 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		_ = job.Release(j.ID)
 		return 1
 	}
-	_ = ledger.Record("gates", usage)
+	if err := ledger.Record("gates", usage); err != nil {
+		fmt.Fprintf(stderr, "plan: gravando jev.jsonl (gates): %v\n", err)
+	}
 
 	// Guarda a evidencia recebida no job, com a marca do que sobreviveu
 	// (spec §10): sem isso nao da para auditar uma selecao depois.
@@ -183,7 +189,9 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			_ = job.Release(j.ID)
 			return 1
 		}
-		_ = ledger.Record("rota", usage)
+		if err := ledger.Record("rota", usage); err != nil {
+			fmt.Fprintf(stderr, "plan: gravando jev.jsonl (rota): %v\n", err)
+		}
 		escolha, err := route.Escolher(elegiveis, d, percentil)
 		if err != nil {
 			fmt.Fprintf(stderr, "plan: %v\n", err)

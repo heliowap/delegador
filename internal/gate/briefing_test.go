@@ -60,6 +60,25 @@ func TestBuildBriefingIncludesEnvPathsWhenGiven(t *testing.T) {
 	}
 }
 
+// Evidencia com kind desconhecido e contada no EvidenceOut — nao pode sumir
+// do briefing em silencio: cai numa secao propria, nomeada como anomalia.
+func TestBuildBriefingSurfacesUnknownKind(t *testing.T) {
+	kept := []Evidence{
+		{Kind: "trecho", Ref: "a.go:1", Text: "x"},
+		{Kind: "metrica", Ref: "bench.out", Text: "p99 subiu de 40ms para 900ms"},
+	}
+	out := BuildBriefing("tarefa", kept, BriefingLimits{TestCmd: "go test ./..."})
+	if !strings.Contains(out, "p99 subiu de 40ms para 900ms") {
+		t.Error("evidencia de kind desconhecido sumiu do briefing")
+	}
+	if !strings.Contains(out, "kind nao reconhecido") {
+		t.Error("a secao tinha que nomear que o kind e anomalia")
+	}
+	if !strings.Contains(out, "bench.out") {
+		t.Error("a ref do item tinha que aparecer")
+	}
+}
+
 func TestParseEvidenceReadsJSONL(t *testing.T) {
 	in := strings.NewReader(
 		`{"kind":"trecho","ref":"a.go:1","text":"x"}` + "\n" +
