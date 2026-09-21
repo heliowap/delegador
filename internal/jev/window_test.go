@@ -14,8 +14,8 @@ func TestEstimateTokensIsRoughlyCharsOverFour(t *testing.T) {
 
 func TestStateBudgetSubtractsLongestQuestion(t *testing.T) {
 	qs := map[string]Question{
-		"curta":  Noul{Instructions: "ok?"},
-		"longa":  Noul{Instructions: strings.Repeat("x", 4000)}, // ~1000 tokens
+		"curta": Noul{Instructions: "ok?"},
+		"longa": Noul{Instructions: strings.Repeat("x", 4000)}, // ~1000 tokens
 	}
 	got, err := StateBudget(qs, DefaultLimits())
 	if err != nil {

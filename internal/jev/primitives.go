@@ -1,6 +1,9 @@
 package jev
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strconv"
+)
 
 // Question e uma pergunta do System One. Interface selada: so os tres
 // primitivos do TypeSafe a implementam.
@@ -27,7 +30,7 @@ type Choice struct {
 // Score posiciona numa escala ordenada de 2 a 10 niveis, do menor ao maior.
 type Score struct {
 	Instructions string   `json:"instructions"`
-	Criteria    []string `json:"criteria"`
+	Criteria     []string `json:"criteria"`
 }
 
 func (Noul) isQuestion()   {}
@@ -38,9 +41,9 @@ func (Score) isQuestion()  {}
 // pergunta. Os MarshalJSON abaixo o injetam na serializacao.
 
 type noulWire struct {
-	Type         string         `json:"type"`
-	Instructions string         `json:"instructions"`
-	Criteria     *NoulCriteria  `json:"criteria,omitempty"`
+	Type         string        `json:"type"`
+	Instructions string        `json:"instructions"`
+	Criteria     *NoulCriteria `json:"criteria,omitempty"`
 }
 
 func (n Noul) MarshalJSON() ([]byte, error) {
@@ -127,13 +130,52 @@ func (a Answers) ScoreOf(id string) (ScoreAnswer, bool) {
 	if !ok || r.Type != "score" {
 		return ScoreAnswer{}, false
 	}
-	var probs []float64
-	if s, ok := r.Probabilities.([]any); ok {
-		for _, v := range s {
-			if f, ok := v.(float64); ok {
-				probs = append(probs, f)
+	return ScoreAnswer{Score: r.Score, Confidence: r.Confidence,
+		Probabilities: distribuicao(r.Probabilities), Legend: r.Legend}, true
+}
+
+// distribuicao le a massa por nivel de um Score nas DUAS formas que o
+// servico usa: lista posicional e objeto com o indice do nivel na chave.
+//
+// Medido em 2026-09-21 contra a API real: ela devolve o objeto
+// (`{"0":0.01,"1":0.58,...}`), e a versao anterior so aceitava a lista —
+// o type assertion falhava calado e Probabilities vinha nil em producao,
+// enquanto os testes passavam porque a fixture usava lista. Nada quebrava
+// porque nada consumia a distribuicao ainda; guardar a distribuicao para
+// recalibrar e justamente o que passa a consumi-la.
+func distribuicao(v any) []float64 {
+	switch p := v.(type) {
+	case []any:
+		out := make([]float64, 0, len(p))
+		for _, x := range p {
+			f, _ := x.(float64)
+			out = append(out, f)
+		}
+		return out
+	case map[string]any:
+		// Chave e o indice do nivel: o tamanho sai da maior chave, para
+		// que um nivel de massa zero omitido nao desloque os outros.
+		maior := -1
+		vals := make(map[int]float64, len(p))
+		for k, x := range p {
+			i, err := strconv.Atoi(k)
+			if err != nil {
+				return nil
+			}
+			f, _ := x.(float64)
+			vals[i] = f
+			if i > maior {
+				maior = i
 			}
 		}
+		if maior < 0 {
+			return nil
+		}
+		out := make([]float64, maior+1)
+		for i, f := range vals {
+			out[i] = f
+		}
+		return out
 	}
-	return ScoreAnswer{Score: r.Score, Confidence: r.Confidence, Probabilities: probs, Legend: r.Legend}, true
+	return nil
 }
