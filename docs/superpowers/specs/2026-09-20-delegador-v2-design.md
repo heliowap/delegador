@@ -278,6 +278,18 @@ os tetos do Jev, ledger.
 Integração: laço completo contra o servidor falso, incluindo veto e escalada.
 
 `evals/`: fixtures rotuladas contra o Jev real, puladas sem `TYPESAFE_API_KEY`.
+Três seções. **`rota`** e **`autonomia`** conferem se a resposta cai do lado
+certo do limiar. **`estabilidade`** repete a mesma pergunta sobre o mesmo
+estado e reprova por duas coisas distintas: cair do lado errado em alguma
+execução, e amplitude acima do tolerado. Um gate que oscila é pior que um
+gate severo — ele ensina a tentar de novo em vez de corrigir.
+
+A estabilidade cobre os nove nouls que **reprovam** trabalho:
+`desenho_em_aberto`, `toca_sensivel`, `criterio_de_pronto` e os seis do
+briefing. `defeito_unico` e `cruza_pacotes` ficam de fora porque só avisam.
+Cada caso manda o **estado real do gate**, com `tarefa` e `briefing` juntos,
+e mede os nove numa requisição só — perguntas independentes sobre o mesmo
+estado não veem as respostas umas das outras.
 
 ## 12. O que sobrevive do v1
 
@@ -387,3 +399,37 @@ são duas fixtures pareadas em `evals/`: uma com complexidade baixa e volume
 alto (a migração), outra com complexidade alta e volume baixo (a janela de
 concorrência entre cache e expiração). As duas passando significa que o
 sistema não confunde mais tamanho com dificuldade.
+
+### Oscilação: encontrada, explicada e travada
+
+Uma execução do gate aprovou um briefing e outra reprovou o mesmo, em
+`criterio_de_pronto`. Medir a pergunta isolada mostrou 0,130 a 0,160,
+perfeitamente estável, e produziu a conclusão errada de que não havia
+oscilação. **A medição estava errada porque o estado estava errado:** ela
+omitia `briefing.texto`, que o gate real inclui. Com o estado de verdade, a
+mesma pergunta devolvia **0,540 a 0,610** — em cima do limiar de 0,60, caindo
+do lado errado em 2 de 6 execuções.
+
+A causa era um defeito de especificação. `criterio_de_pronto` falava de
+`tarefa.texto` enquanto via também `briefing.texto`, e os dois discordavam: a
+tarefa não dizia como saber que terminou, o briefing dizia, com a ordem de
+confirmar o vermelho e o verde e os comandos copiáveis. O modelo ficava
+honestamente incerto, e um Noul perto de 0,5 é isso — probabilidade parecida
+para sim e não —, não ruído.
+
+A pergunta passou a julgar os dois **como um artefato só**, que é o que o
+executor recebe, e a reconhecer que "escreva o teste que expõe o defeito e
+faça passar" é critério de término: o verde é a prova. Depois da correção,
+0,960 cravado no mesmo estado.
+
+Varredura posterior dos nove gates bloqueantes não encontrou outra oscilação.
+Num briefing bom, amplitude máxima 0,070 e menor margem de 0,16 até o limiar;
+num briefing **quase bom** — com `arquivo:linha` presente mas contrato vago,
+um comando só, limites frouxos e sem pedido de relatório — as cinco
+reprovações ficam entre 0,030 e 0,240, com amplitude de no máximo 0,040. O
+caso quase bom é o que importa: hesitar no briefing obviamente ruim não custa
+nada.
+
+**A lição de método sobrevive ao caso:** medir uma pergunta contra uma
+reconstrução do estado, em vez do estado que o sistema monta, esconde o
+defeito e produz confiança injustificada.

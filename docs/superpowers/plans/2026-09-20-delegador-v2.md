@@ -39,6 +39,17 @@ registradas no [§15 do spec](../specs/2026-09-20-delegador-v2-design.md):
    branch parte de `98bce8e`, anterior ao arquivo.
 4. **Task 13/14** gravam `verify-N.json` numerado por tentativa da cascata,
    não o `verify.json` único que o spec previa.
+5. **Task 10** previa fixtures em `evals/` para as perguntas novas, e elas
+   revelaram mais do que confirmar rótulos. `dimensao_dominante` e
+   `tarefa_autocontida` julgavam a **forma** do briefing, que é constante em
+   todo briefing deste sistema, e por isso respondiam quase sempre a mesma
+   coisa. Calibrá-las expôs um defeito de taxonomia — `agentica` misturava
+   dois eixos — e o buraco de volume que o Score `volume` fechou.
+6. **`evals/` ganhou uma terceira seção, `estabilidade`**, que o plano não
+   previa: ela repete a mesma pergunta sobre o mesmo estado e cobre os nove
+   nouls que reprovam trabalho. Foi ela que encontrou a única oscilação real
+   do sistema, em `criterio_de_pronto`, depois de duas medições minhas terem
+   concluído o contrário.
 
 ## Global Constraints
 
