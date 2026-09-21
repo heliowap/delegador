@@ -58,9 +58,21 @@ func TestOrcamentoNaoOlhaDificuldade(t *testing.T) {
 // A tolerancia de ociosidade escala junto: medido em 2026-09-21, o glm gastou
 // 10 turnos lendo o contrato e os testes antes da primeira escrita numa tarefa
 // de volume 2.0, e o limiar fixo de 10 a matou no turno 10 de 60 concedidos.
+// O preambulo que o briefing prescreve — ler contrato, ler teste, confirmar
+// o vermelho — nao e escrita. Punir isso e punir o fluxo que se exige.
+func TestOciosidadeNuncaFicaAbaixoDoPreambulo(t *testing.T) {
+	for _, v := range []float64{0, 0.04, 0.5, 1.0} {
+		got := OrcamentoPara(v, base())
+		if got.TurnosOciosos < base().TurnosOciosos {
+			t.Errorf("volume %.2f -> %d ociosos; volume nao pode reduzir abaixo do base %d",
+				v, got.TurnosOciosos, base().TurnosOciosos)
+		}
+	}
+}
+
 func TestOciosidadeEscalaComOVolume(t *testing.T) {
-	peq := OrcamentoPara(0, base())
-	gra := OrcamentoPara(2, base())
+	peq := OrcamentoPara(1, base())
+	gra := OrcamentoPara(3, base())
 	if peq.TurnosOciosos >= gra.TurnosOciosos {
 		t.Errorf("ociosos: volume 0 -> %d, volume 2 -> %d; deveria crescer",
 			peq.TurnosOciosos, gra.TurnosOciosos)

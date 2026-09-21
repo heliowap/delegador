@@ -31,7 +31,7 @@ func OrcamentoBase() Orcamento {
 const (
 	turnosMin  = 6
 	turnosMax  = 200
-	ociososMin = 4
+	ociososMin = 10
 	ociososMax = 60
 	tetoUSDMin = 0.10
 	tetoUSDMax = 50.00
@@ -50,7 +50,19 @@ func OrcamentoPara(volume float64, base Orcamento) Orcamento {
 	turnos := int(math.Round(float64(base.Turnos) * fator))
 	teto := base.TetoUSD * fator
 
-	ociosos := int(math.Round(float64(base.TurnosOciosos) * fator))
+	// Volume so AUMENTA a tolerancia de ociosidade, nunca reduz. O custo de
+	// preparacao e praticamente constante — ler o contrato, ler os testes e
+	// rodar o teste para ver o vermelho, que o proprio briefing prescreve e
+	// que e exec, nao write. O que cresce com o volume e o trabalho total,
+	// nao o preambulo.
+	//
+	// Medido em 2026-09-21: numa tarefa de volume 0.04 a escala para baixo
+	// deu 5 turnos ociosos, e o modelo foi vetado depois de ler o stub, ler
+	// o teste e confirmar o vermelho. Tres acoes legitimas, nenhuma escrita.
+	ociosos := base.TurnosOciosos
+	if escalado := int(math.Round(float64(base.TurnosOciosos) * fator)); escalado > ociosos {
+		ociosos = escalado
+	}
 	return Orcamento{
 		Turnos:        clampInt(turnos, turnosMin, turnosMax),
 		TetoUSD:       clampFloat(teto, tetoUSDMin, tetoUSDMax),
