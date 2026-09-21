@@ -1,6 +1,10 @@
 package tools
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 // Escrita em .git e negação dura: hook ou textconv plantado la executa
 // durante o verify, e config alterada fica como superficie de ataque
@@ -42,5 +46,43 @@ func TestDotGitDenialDoesNotCatchLookalikes(t *testing.T) {
 		if d := Allow(Call{Name: "read_file", Args: map[string]string{"path": path}}, p); !d.Allowed {
 			t.Errorf("leitura de .git deveria seguir livre: %q — %s", path, d.Reason)
 		}
+	}
+}
+
+// Symlink dentro da worktree apontando para .git nao contorna o veto: o
+// caminho PEDIDO nao tem segmento .git — so o resolvido tem, e e por isso
+// que a conferencia repete depois do resolve. O atalho e plantavel por
+// codigo executado num comando permitido (os.Symlink num teste), entao a
+// fronteira nao pode confiar na grafia do pedido. Leitura pelo mesmo
+// atalho segue livre: .git continua contexto legitimo para ler.
+func TestDeniesWriteThroughDotGitSymlink(t *testing.T) {
+	wt := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(wt, ".git", "hooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// lnk -> .git na raiz; sub/deep -> ../.git/hooks um nivel abaixo — o
+	// segundo prova que o segmento .git do resolvido pega em qualquer
+	// profundidade, nao so no primeiro componente.
+	if err := os.Symlink(".git", filepath.Join(wt, "lnk")); err != nil {
+		t.Skip("symlink indisponivel neste sistema")
+	}
+	if err := os.MkdirAll(filepath.Join(wt, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("..", ".git", "hooks"), filepath.Join(wt, "sub", "deep")); err != nil {
+		t.Skip("symlink indisponivel neste sistema")
+	}
+
+	p := Policy{Worktree: wt, WritePrefixes: []string{""}}
+	for _, path := range []string{"lnk/config", "lnk/hooks/post-checkout", "sub/deep/pre-commit"} {
+		if d := Allow(Call{Name: "write_file", Args: map[string]string{"path": path}}, p); d.Allowed {
+			t.Errorf("escrita via symlink para dentro de .git aceita: %q", path)
+		}
+		if d := Allow(Call{Name: "edit_file", Args: map[string]string{"path": path, "old": "a", "new": "b"}}, p); d.Allowed {
+			t.Errorf("edicao via symlink para dentro de .git aceita: %q", path)
+		}
+	}
+	if d := Allow(Call{Name: "read_file", Args: map[string]string{"path": "lnk/config"}}, p); !d.Allowed {
+		t.Errorf("leitura via symlink tinha que seguir livre: %s", d.Reason)
 	}
 }

@@ -78,12 +78,8 @@ func allowPath(rel string, p Policy, write bool) Decision {
 	// .git e interno do git em qualquer nivel: hooks, config e textconv la
 	// dentro executam codigo durante o verify e persistem ataque de
 	// operador. A negação e por segmento — "a/.git/x" tambem e git interno.
-	if write {
-		for _, seg := range strings.Split(clean, string(filepath.Separator)) {
-			if seg == ".git" {
-				return deny("escrita em .git nao e permitida: %q", rel)
-			}
-		}
+	if write && segGit(clean) {
+		return deny("escrita em .git nao e permitida: %q", rel)
 	}
 
 	root, err := resolve(p.Worktree)
@@ -96,6 +92,16 @@ func allowPath(rel string, p Policy, write bool) Decision {
 	}
 	if !under(target, root) {
 		return deny("caminho resolve para fora da worktree: %q", rel)
+	}
+
+	// O caminho RESOLVIDO repete a conferencia de .git: um symlink dentro
+	// da worktree apontando para .git passa pelo cheque do pedido (nele o
+	// segmento nao aparece) e so existe depois do resolve. So roda depois
+	// do under — fora da raiz o Rel sairia com ".." e o caso ja foi negado.
+	if write {
+		if relResolvido, err := filepath.Rel(root, target); err == nil && segGit(relResolvido) {
+			return deny("escrita em .git nao e permitida: %q", rel)
+		}
 	}
 
 	if !write {
@@ -146,6 +152,18 @@ func under(target, root string) bool {
 		return true
 	}
 	return strings.HasPrefix(target, root+string(filepath.Separator))
+}
+
+// segGit responde se algum segmento do caminho limpo e ".git" — interno do
+// git em qualquer nivel: o .git da raiz, o de submodulo aninhado e o alvo
+// resolvido de um symlink apontando para dentro dele.
+func segGit(clean string) bool {
+	for _, seg := range strings.Split(clean, string(filepath.Separator)) {
+		if seg == ".git" {
+			return true
+		}
+	}
+	return false
 }
 
 // ---------- comando ----------

@@ -199,10 +199,49 @@ func pidVivo(pid int) bool {
 	return err == nil || !errors.Is(err, syscall.ESRCH)
 }
 
+// runLockWriteGrace e o suspiro antes de julgar uma trava que existe sem
+// pid legivel: entre o O_EXCL do dono e o Fprintf do pid o arquivo esta
+// vazio, e ler nesse intervalo veria "morto" numa trava nascendo.
+const runLockWriteGrace = 75 * time.Millisecond
+
+// runLockPIDComGraca da uma segunda leitura a trava existente mas vazia ou
+// ilegivel: a janela entre o O_EXCL do dono e a gravacao do pid mostraria
+// "morto", e tratar como velha ali removeria a trava de um run nascendo —
+// dois executores no mesmo job. Vazio que sobrevive a releitura e create
+// abandonado e segue como velho; arquivo ausente nao espera, porque a
+// disputa real acontece no O_EXCL.
+func runLockPIDComGraca(j *job.Job) int {
+	b, err := os.ReadFile(j.Path("run.lock"))
+	if err != nil {
+		return 0
+	}
+	if pid, _ := strconv.Atoi(strings.TrimSpace(string(b))); pid != 0 {
+		return pid
+	}
+	time.Sleep(runLockWriteGrace)
+	return runLockPID(j)
+}
+
+// releaseRunLock solta a run.lock so se ela ainda for nossa — o mesmo
+// confere-dono do Release da worktree: o conteudo tem que ser o pid deste
+// processo. Pid alheio significa que outra instancia tomou a vaga depois
+// da nossa saida; remover apagaria a trava dela e abriria a porta para um
+// terceiro run.
+func releaseRunLock(j *job.Job) {
+	b, err := os.ReadFile(j.Path("run.lock"))
+	if err != nil {
+		return
+	}
+	if pid, _ := strconv.Atoi(strings.TrimSpace(string(b))); pid == os.Getpid() {
+		_ = os.Remove(j.Path("run.lock"))
+	}
+}
+
 // acquireRunLock cria run.lock exclusivo com o nosso pid. Trava existente
-// com pid vivo recusa — um run ativo por job; com pid morto ou ilegivel e
-// velha e some. Uma retentativa cobre a corrida de a trava sumir entre o
-// exame e a criacao.
+// com pid vivo recusa — um run ativo por job; com pid morto e velha e
+// some; sem pid legivel recebe a graca de releitura antes de contar como
+// create abandonado. Uma retentativa cobre a corrida de a trava sumir
+// entre o exame e a criacao.
 func acquireRunLock(j *job.Job) error {
 	lock := j.Path("run.lock")
 	for range 2 {
@@ -214,7 +253,7 @@ func acquireRunLock(j *job.Job) error {
 		if !os.IsExist(err) {
 			return err
 		}
-		if pid := runLockPID(j); pidVivo(pid) {
+		if pid := runLockPIDComGraca(j); pidVivo(pid) {
 			return fmt.Errorf("job %s ja tem run ativo (pid %d)", j.ID, pid)
 		}
 		if err := os.Remove(lock); err != nil && !os.IsNotExist(err) {
@@ -258,7 +297,7 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	// e duplo executor. Morto ou ausente: o run anterior morreu no meio —
 	// marca failed e segue como retomada, que e o caminho de recuperacao.
 	if j.State == job.StateRunning {
-		if pid := runLockPID(j); pidVivo(pid) {
+		if pid := runLockPIDComGraca(j); pidVivo(pid) {
 			fmt.Fprintf(stderr, "run: job %s ja tem run ativo (pid %d)\n", j.ID, pid)
 			return 1
 		}
@@ -310,7 +349,7 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return 1
 	}
-	defer os.Remove(j.Path("run.lock"))
+	defer releaseRunLock(j)
 
 	// O roster entra antes do laco: o ledger do executor precisa do preco
 	// do modelo e a cascata precisa dos elegiveis para re-rotear.

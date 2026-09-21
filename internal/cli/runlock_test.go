@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/heliowap/delegador/internal/job"
 )
@@ -133,5 +134,91 @@ func TestRunRecusaJobSemModelo(t *testing.T) {
 	}
 	if !strings.Contains(errBuf.String(), "sem modelo") {
 		t.Errorf("o erro tinha que nomear a causa: %q", errBuf.String())
+	}
+}
+
+// A corrida que a graca cobre: um contender le a trava no intervalo entre
+// o O_EXCL do dono e a gravacao do pid — arquivo existe mas esta vazio.
+// Tratar vazio como morto removeria a trava do dono e duplicaria o
+// executor. A releitura tem que ver o pid chegar e recusar, com a trava
+// do dono intacta.
+func TestAcquireTrataTravaVaziaComoFresca(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	j, err := job.Create(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock := j.Path("run.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// O dono termina a gravacao no meio da graca — o pid vivo do proprio
+	// teste faz o papel do executor que esta nascendo.
+	go func() {
+		time.Sleep(runLockWriteGrace / 3)
+		_ = os.WriteFile(lock, []byte(strconv.Itoa(os.Getpid())), 0o644)
+	}()
+
+	err = acquireRunLock(j)
+	if err == nil {
+		t.Fatal("trava que ganhou pid vivo durante a graca tinha que recusar")
+	}
+	if !strings.Contains(err.Error(), "ativo") {
+		t.Errorf("a recusa tinha que nomear o run ativo: %v", err)
+	}
+	if _, err := os.Stat(lock); err != nil {
+		t.Error("a trava do dono nao pode ter sido removida pela releitura")
+	}
+}
+
+// Vazio que ninguem completa e create abandonado: o dono morreu entre o
+// O_EXCL e o pid. Depois da graca a trava conta como velha e a vaga e
+// nossa — e a escolha documentada em runLockPIDComGraca.
+func TestAcquireAssumeTravaVaziaAbandonada(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	j, err := job.Create(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(j.Path("run.lock"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := acquireRunLock(j); err != nil {
+		t.Fatalf("create abandonado tinha que ceder a vaga: %v", err)
+	}
+	if pid := runLockPID(j); pid != os.Getpid() {
+		t.Errorf("a trava nova tinha que carregar o nosso pid: %d", pid)
+	}
+}
+
+// Soltar a trava confere o dono, como o Release da worktree: conteudo com
+// pid alheio e a trava de outra instancia que tomou a vaga depois da nossa
+// saida — remover apagaria a protecao dela e abriria a porta para um
+// terceiro run.
+func TestReleaseRunLockSoRemoveTravaPropria(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	j, err := job.Create(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock := j.Path("run.lock")
+
+	// Trava nossa: sai.
+	if err := os.WriteFile(lock, []byte(strconv.Itoa(os.Getpid())), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	releaseRunLock(j)
+	if _, err := os.Stat(lock); !os.IsNotExist(err) {
+		t.Error("a trava com o nosso pid tinha que ser removida")
+	}
+
+	// Trava alheia: fica intacta, byte a byte.
+	if err := os.WriteFile(lock, []byte(strconv.Itoa(pidMorto)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	releaseRunLock(j)
+	b, err := os.ReadFile(lock)
+	if err != nil || string(b) != strconv.Itoa(pidMorto) {
+		t.Errorf("trava alheia nao pode ser tocada: %q %v", b, err)
 	}
 }
