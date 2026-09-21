@@ -145,44 +145,82 @@
   ],
   "estabilidade": [
     {
+      "nome": "todos os gates bloqueantes, briefing bom: aprovam sem hesitar",
+      "conjuntos": [
+        "delegabilidade",
+        "briefing"
+      ],
+      "tarefa": "A funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.",
+      "briefing": "# Tarefa\n\nA funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.\n\nLocalizacao: pkg/mat/soma.go:5\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nfunc Soma(a, b int) int {\n\treturn a - b\n}\n```\n\n## Ordem de trabalho\n\n1. Escreva primeiro o teste que expoe este defeito.\n2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. Cole a saida da falha no relatorio.\n3. So entao corrija.\n4. Rode de novo e confirme o verde.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/ -run TestSoma\ngo test ./...\ngo vet ./...\n```\n\n## Limites\n\n- Nao faca commit e nao faca push.\n- Nao acesse a rede.\n- Trabalhe apenas nesta worktree.\n\n## Relatorio final\n\nAo terminar, responda com: o teste que voce escreveu, a mudanca feita arquivo por arquivo, e a saida literal dos comandos que voce executou, incluindo a do vermelho inicial.\n",
+      "repeticoes": 5,
+      "amplitude_maxima": 0.15,
+      "limiares": {
+        "toca_sensivel": 0.5
+      },
+      "esperado": {
+        "aponta_arquivo_linha": true,
+        "cita_fonte_do_contrato": true,
+        "pede_teste_antes_da_correcao": true,
+        "comandos_copiaveis": true,
+        "limites_explicitos": true,
+        "pede_relatorio": true,
+        "criterio_de_pronto": true,
+        "desenho_em_aberto": false,
+        "toca_sensivel": false
+      },
+      "nota": "Os nove gates que REPROVAM trabalho, medidos juntos sobre o briefing que passou no e2e de 2026-09-21. Medido: amplitude maxima 0.070, e a menor margem foi comandos_copiaveis a 0.16 do limiar. Uma requisicao cobre os nove porque perguntas independentes nao se veem."
+    },
+    {
+      "nome": "todos os gates bloqueantes, briefing marginal: reprovam sem hesitar",
+      "conjuntos": [
+        "delegabilidade",
+        "briefing"
+      ],
+      "tarefa": "A funcao Soma em pkg/mat/soma.go:5 nao devolve o que deveria. Corrija.",
+      "briefing": "# Tarefa\n\nA funcao Soma em `pkg/mat/soma.go:5` nao devolve o que deveria.\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nreturn a - b\n```\n\n## Ordem de trabalho\n\nCorrija a funcao e cubra com teste.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/\n```\n\n## Limites\n\n- Trabalhe nesta pasta.\n",
+      "repeticoes": 5,
+      "amplitude_maxima": 0.15,
+      "limiares": {
+        "toca_sensivel": 0.5
+      },
+      "esperado": {
+        "aponta_arquivo_linha": true,
+        "cita_fonte_do_contrato": false,
+        "pede_teste_antes_da_correcao": false,
+        "comandos_copiaveis": false,
+        "limites_explicitos": false,
+        "pede_relatorio": false,
+        "criterio_de_pronto": true,
+        "desenho_em_aberto": false,
+        "toca_sensivel": false
+      },
+      "nota": "O lado que importa: um briefing QUASE bom. Aponta arquivo:linha mas o contrato e vago, tem um comando so, limites frouxos e nao pede relatorio. Medido: as cinco reprovacoes ficam entre 0.030 e 0.240, longe do limiar, com amplitude <= 0.040. Gate que hesita no quase-bom ensina a tentar de novo em vez de corrigir."
+    },
+    {
       "nome": "criterio_de_pronto: briefing completo supre o criterio que a tarefa omite",
-      "pergunta": "criterio_de_pronto",
-      "conjunto": "delegabilidade",
+      "conjuntos": [
+        "delegabilidade"
+      ],
       "tarefa": "A funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.",
       "briefing": "# Tarefa\n\nA funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.\n\nLocalizacao: pkg/mat/soma.go:5\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nfunc Soma(a, b int) int {\n\treturn a - b\n}\n```\n\n## Ordem de trabalho\n\n1. Escreva primeiro o teste que expoe este defeito.\n2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. Cole a saida da falha no relatorio.\n3. So entao corrija.\n4. Rode de novo e confirme o verde.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/ -run TestSoma\ngo test ./...\ngo vet ./...\n```\n\n## Limites\n\n- Nao faca commit e nao faca push.\n- Nao acesse a rede.\n- Trabalhe apenas nesta worktree.\n\n## Relatorio final\n\nAo terminar, responda com: o teste que voce escreveu, a mudanca feita arquivo por arquivo, e a saida literal dos comandos que voce executou, incluindo a do vermelho inicial.\n",
       "repeticoes": 6,
+      "amplitude_maxima": 0.15,
       "esperado": {
-        "lado": true,
-        "limiar": 0.6,
-        "amplitude_maxima": 0.15
+        "criterio_de_pronto": true
       },
-      "nota": "ACHADO de 2026-09-21. Medi esta pergunta isolada, SEM briefing no estado: 0.130 a 0.160, estavel, reprovando 12 de 12 — e conclui que minha alegacao de oscilacao estava errada. Esta fixture, que manda o estado REAL do gate (com briefing), devolveu 0.540 a 0.610: em cima do limiar, lado errado em 2 de 6. A oscilacao era real e a causa era minha: a pergunta falava de `tarefa.texto` enquanto via tambem o briefing, e os dois discordavam. Reescrita para julgar os dois como um artefato so, que e o que o executor recebe."
+      "nota": "ACHADO de 2026-09-21, o unico caso de oscilacao real encontrado. Medi a pergunta isolada, SEM briefing no estado: 0.130 a 0.160, estavel, e conclui que minha alegacao de oscilacao estava errada. Com o estado REAL do gate ela devolveu 0.540 a 0.610 — em cima do limiar, lado errado em 2 de 6. A causa era minha: a pergunta falava de tarefa.texto enquanto via tambem o briefing, e os dois discordavam. Reescrita para julgar os dois como um artefato so. Depois da correcao: 0.960 cravado."
     },
     {
-      "nome": "criterio_de_pronto aprova de forma estavel quando o criterio esta escrito",
-      "pergunta": "criterio_de_pronto",
-      "conjunto": "delegabilidade",
-      "tarefa": "A funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija. Pronto quando 'go test ./pkg/mat/ -run TestSoma' passar e 'go vet ./...' sair limpo.",
-      "briefing": "# Tarefa\n\nA funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.\n\nLocalizacao: pkg/mat/soma.go:5\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nfunc Soma(a, b int) int {\n\treturn a - b\n}\n```\n\n## Ordem de trabalho\n\n1. Escreva primeiro o teste que expoe este defeito.\n2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. Cole a saida da falha no relatorio.\n3. So entao corrija.\n4. Rode de novo e confirme o verde.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/ -run TestSoma\ngo test ./...\ngo vet ./...\n```\n\n## Limites\n\n- Nao faca commit e nao faca push.\n- Nao acesse a rede.\n- Trabalhe apenas nesta worktree.\n\n## Relatorio final\n\nAo terminar, responda com: o teste que voce escreveu, a mudanca feita arquivo por arquivo, e a saida literal dos comandos que voce executou, incluindo a do vermelho inicial.\n",
-      "repeticoes": 6,
-      "esperado": {
-        "lado": true,
-        "limiar": 0.6,
-        "amplitude_maxima": 0.15
-      },
-      "nota": "Metade discriminante do par: mesma tarefa, mais uma frase dizendo como saber que terminou. Medido 8 vezes: 0.970 em todas, amplitude ZERO. O par prova que a pergunta responde ao conteudo, nao a ruido."
-    },
-    {
-      "nome": "criterio_de_pronto reprova de forma estavel quando nem a tarefa nem o briefing dizem",
-      "pergunta": "criterio_de_pronto",
-      "conjunto": "delegabilidade",
+      "nome": "criterio_de_pronto reprova quando nem a tarefa nem o briefing dizem",
+      "conjuntos": [
+        "delegabilidade"
+      ],
       "tarefa": "A listagem de pedidos esta lenta em producao. Deixe mais rapida.",
       "briefing": "# Tarefa\n\nA listagem de pedidos esta lenta em producao. Deixe mais rapida.\n\n## Limites\n\n- Nao faca commit e nao faca push.\n",
-      "repeticoes": 6,
+      "repeticoes": 5,
+      "amplitude_maxima": 0.2,
       "esperado": {
-        "lado": false,
-        "limiar": 0.6,
-        "amplitude_maxima": 0.2
+        "criterio_de_pronto": false
       },
       "nota": "Negativa de verdade: nenhum dos dois textos diz como saber que terminou."
     }

@@ -7,7 +7,9 @@ package evals
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"os"
+	"sort"
 	"testing"
 	"time"
 
@@ -40,18 +42,15 @@ type fixtureSet struct {
 	// Um gate que oscila e pior que um gate severo: ele ensina a tentar de
 	// novo em vez de corrigir, e some com a confianca no veredito.
 	Estabilidade []struct {
-		Nome       string `json:"nome"`
-		Pergunta   string `json:"pergunta"`
-		Conjunto   string `json:"conjunto"`
-		Tarefa     string `json:"tarefa"`
-		Briefing   string `json:"briefing"`
-		Repeticoes int    `json:"repeticoes"`
-		Esperado   struct {
-			Lado         bool    `json:"lado"`
-			Limiar       float64 `json:"limiar"`
-			AmplitudeMax float64 `json:"amplitude_maxima"`
-		} `json:"esperado"`
-		Nota string `json:"nota"`
+		Nome            string             `json:"nome"`
+		Conjuntos       []string           `json:"conjuntos"`
+		Tarefa          string             `json:"tarefa"`
+		Briefing        string             `json:"briefing"`
+		Repeticoes      int                `json:"repeticoes"`
+		AmplitudeMaxima float64            `json:"amplitude_maxima"`
+		Limiares        map[string]float64 `json:"limiares"`
+		Esperado        map[string]bool    `json:"esperado"`
+		Nota            string             `json:"nota"`
 	} `json:"estabilidade"`
 	Watchdog []struct {
 		Nome     string `json:"nome"`
@@ -156,21 +155,33 @@ func TestFixtures(t *testing.T) {
 	})
 
 	t.Run("estabilidade", func(t *testing.T) {
-		conjuntos := map[string]map[string]jev.Question{
-			"delegabilidade": jev.DelegabilityQuestions(),
-			"briefing":       jev.BriefingQuestions(),
-			"autonomia":      jev.AutonomyQuestion(),
+		conjuntos := map[string]func() map[string]jev.Question{
+			"delegabilidade": jev.DelegabilityQuestions,
+			"briefing":       jev.BriefingQuestions,
+			"autonomia":      jev.AutonomyQuestion,
 		}
 		for _, f := range fx.Estabilidade {
 			t.Run(f.Nome, func(t *testing.T) {
-				conj, ok := conjuntos[f.Conjunto]
-				if !ok {
-					t.Fatalf("conjunto desconhecido: %q", f.Conjunto)
+				// Uma requisicao cobre todas as perguntas do caso: elas sao
+				// independentes e nao veem as respostas umas das outras.
+				qs := map[string]jev.Question{}
+				for _, nome := range f.Conjuntos {
+					fn, ok := conjuntos[nome]
+					if !ok {
+						t.Fatalf("conjunto desconhecido: %q", nome)
+					}
+					for id, q := range fn() {
+						if _, quer := f.Esperado[id]; quer {
+							qs[id] = q
+						}
+					}
 				}
-				q, ok := conj[f.Pergunta]
-				if !ok {
-					t.Fatalf("pergunta %q ausente em %q", f.Pergunta, f.Conjunto)
+				for id := range f.Esperado {
+					if _, ok := qs[id]; !ok {
+						t.Fatalf("pergunta %q nao existe nos conjuntos %v", id, f.Conjuntos)
+					}
 				}
+
 				state := map[string]any{
 					"tarefa":   map[string]any{"texto": f.Tarefa},
 					"briefing": map[string]any{"texto": f.Briefing},
@@ -179,31 +190,51 @@ func TestFixtures(t *testing.T) {
 				if n < 2 {
 					n = 5
 				}
-				menor, maior := 2.0, -1.0
-				ladoErrado := 0
+				ampMax := f.AmplitudeMaxima
+				if ampMax <= 0 {
+					ampMax = 0.15
+				}
+
+				menor := map[string]float64{}
+				maior := map[string]float64{}
+				ladoErrado := map[string]int{}
 				for i := 0; i < n; i++ {
-					a := ask(t, state, map[string]jev.Question{f.Pergunta: q})
-					v, ok := a.NoulOf(f.Pergunta)
-					if !ok {
-						t.Fatalf("resposta %d sem %s", i, f.Pergunta)
-					}
-					if v < menor {
-						menor = v
-					}
-					if v > maior {
-						maior = v
-					}
-					if (v >= f.Esperado.Limiar) != f.Esperado.Lado {
-						ladoErrado++
+					a := ask(t, state, qs)
+					for id, querSim := range f.Esperado {
+						v, ok := a.NoulOf(id)
+						if !ok {
+							t.Fatalf("execucao %d: resposta sem %s", i, id)
+						}
+						if i == 0 {
+							menor[id], maior[id] = v, v
+						}
+						menor[id] = math.Min(menor[id], v)
+						maior[id] = math.Max(maior[id], v)
+
+						limiar := 0.60
+						if l, ok := f.Limiares[id]; ok {
+							limiar = l
+						}
+						if (v >= limiar) != querSim {
+							ladoErrado[id]++
+						}
 					}
 				}
-				if ladoErrado > 0 {
-					t.Errorf("%s caiu do lado errado do limiar %.2f em %d de %d execucoes (faixa %.3f..%.3f)",
-						f.Pergunta, f.Esperado.Limiar, ladoErrado, n, menor, maior)
+
+				ids := make([]string, 0, len(f.Esperado))
+				for id := range f.Esperado {
+					ids = append(ids, id)
 				}
-				if amp := maior - menor; amp > f.Esperado.AmplitudeMax {
-					t.Errorf("amplitude %.3f (%.3f..%.3f) acima do maximo tolerado %.3f — o gate oscila",
-						amp, menor, maior, f.Esperado.AmplitudeMax)
+				sort.Strings(ids)
+				for _, id := range ids {
+					if k := ladoErrado[id]; k > 0 {
+						t.Errorf("%s: lado errado em %d de %d execucoes (faixa %.3f..%.3f, quer %v)",
+							id, k, n, menor[id], maior[id], f.Esperado[id])
+					}
+					if amp := maior[id] - menor[id]; amp > ampMax {
+						t.Errorf("%s: amplitude %.3f (%.3f..%.3f) acima do maximo %.3f — o gate oscila",
+							id, amp, menor[id], maior[id], ampMax)
+					}
 				}
 			})
 		}
