@@ -10,7 +10,7 @@ import (
 func m(id string, cod, intel, tau, custoTarefa, precoMTok float64) roster.Model {
 	p := precoMTok
 	return roster.Model{ID: id, Habilitado: true, CustoUSDPorMTok: &p,
-		Sondado:   roster.Probe{ToolCall: true},
+		Sondado: roster.Probe{ToolCall: true},
 		Benchmark: &roster.Benchmark{CodingIndex: cod, IntelligenceIndex: intel,
 			TauBench: tau, CustoPorTarefaUSD: custoTarefa}}
 }

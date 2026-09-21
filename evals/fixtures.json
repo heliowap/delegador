@@ -29,7 +29,8 @@
       "texto": "# Tarefa\n\nA funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.\n\nLocalizacao: pkg/mat/soma.go:5\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nfunc Soma(a, b int) int {\n\treturn a - b\n}\n```\n\n## Ordem de trabalho\n\n1. Escreva primeiro o teste que expoe este defeito.\n2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. Cole a saida da falha no relatorio.\n3. So entao corrija.\n4. Rode de novo e confirme o verde.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/ -run TestSoma\ngo test ./...\ngo vet ./...\n```\n\n## Limites\n\n- Nao faca commit e nao faca push.\n- Nao acesse a rede.\n- Trabalhe apenas nesta worktree.\n\n## Relatorio final\n\nAo terminar, responda com: o teste que voce escreveu, a mudanca feita arquivo por arquivo, e a saida literal dos comandos que voce executou, incluindo a do vermelho inicial.\n",
       "esperado": {
         "dimensao_dominante": "mecanica",
-        "complexidade_maxima": 1.0
+        "complexidade_maxima": 1.0,
+        "volume_maximo": 0.8
       },
       "nota": "Em 2026-09-21 este briefing exato recebeu 'agentica'. Uma linha, defeito apontado com arquivo:linha, correcao obvia. Rota errada aqui compra modelo caro para trabalho trivial."
     },
@@ -38,7 +39,8 @@
       "texto": "# Tarefa\n\nEm `internal/http/retry.go:18`, `maxBackoff` esta `30 * time.Second` e o ADR `docs/adr/0012.md` fixa 10 segundos.\n\n## Onde esta o defeito\n\n`internal/http/retry.go:18`:\n```\nconst maxBackoff = 30 * time.Second\n```\n\n## Ordem de trabalho\n\n1. Escreva o teste que expoe o valor errado.\n2. Confirme o vermelho.\n3. Corrija.\n\n```bash\ngo test ./internal/http/ -run TestBackoff\n```",
       "esperado": {
         "dimensao_dominante": "mecanica",
-        "complexidade_maxima": 1.0
+        "complexidade_maxima": 1.0,
+        "volume_maximo": 1.0
       }
     },
     {
@@ -46,17 +48,20 @@
       "texto": "# Tarefa\n\nUsuarios relatam que, sob carga, algumas requisicoes com token expirado recebem 200. Nao reproduz com um request isolado.\n\n`internal/auth/cache.go` guarda a decisao de autorizacao por 60s. `internal/auth/token.go` confere a expiracao. Descubra por que a combinacao devolve 200 e corrija de modo que o cache nunca sobreviva a expiracao do token que o originou.\n\n```bash\ngo test ./internal/auth/\n```",
       "esperado": {
         "dimensao_dominante": "raciocinio",
-        "complexidade_minima": 2.0
-      }
+        "complexidade_minima": 2.0,
+        "volume_maximo": 1.8
+      },
+      "nota": "ORTOGONALIDADE, metade B: complexidade ALTA (janela de concorrencia entre dois arquivos) e volume BAIXO (poucos pontos). Par com a fixture da migracao."
     },
     {
       "nome": "mecanica: migracao repetida em muitos pontos",
       "texto": "# Tarefa\n\nA funcao `log.Printf` foi substituida por `slog.Info` em todo o repositorio. Restam 14 chamadas antigas, em 9 pacotes diferentes, listadas por:\n\n```bash\ngrep -rn 'log.Printf' --include='*.go' .\n```\n\nPara cada uma: converta a chamada, rode `go test ./<pacote>/` e confirme o verde antes de passar para a proxima. Nao agrupe as mudancas: uma de cada vez, com a suite verde entre elas.",
       "esperado": {
         "dimensao_dominante": "mecanica",
-        "complexidade_maxima": 2.0
+        "complexidade_maxima": 2.0,
+        "volume_minimo": 2.0
       },
-      "nota": "ROTULO REVISADO em 2026-09-21, depois de ver o Jev responder 'mecanica'. A revisao e de taxonomia, nao de acomodacao: `agentica` roteia para tau_bench, que mede uso de ferramenta em ambiente multi-turno, e nao extensao. Migracao repetida e mecanica por sitio; o custo dela e numero de turnos, que o Score de complexidade ja captura. Manter as duas acepcoes na mesma opcao era o defeito. Complexidade tambem NAO rotulada: o Jev respondeu 0.30, e ele esta certo — cada sitio da migracao e trivial. Eu e que confundi VOLUME com DIFICULDADE ao escrever >= 1.0. A consequencia e um buraco real do desenho, registrado no spec: nenhuma pergunta do roteamento captura volume. Quem deveria responder por ele sao o teto de turnos e o teto de custo, que hoje vem de configuracao e nao da tarefa."
+      "nota": "ORTOGONALIDADE, metade A: complexidade BAIXA (cada sitio e trivial) e volume ALTO (dezenas de sitios). Par com a fixture do cache. Se as duas passarem, os eixos estao separados de fato. ROTULO REVISADO em 2026-09-21, depois de ver o Jev responder 'mecanica'. A revisao e de taxonomia, nao de acomodacao: `agentica` roteia para tau_bench, que mede uso de ferramenta em ambiente multi-turno, e nao extensao. Migracao repetida e mecanica por sitio; o custo dela e numero de turnos, que o Score de complexidade ja captura. Manter as duas acepcoes na mesma opcao era o defeito. Complexidade tambem NAO rotulada: o Jev respondeu 0.30, e ele esta certo — cada sitio da migracao e trivial. Eu e que confundi VOLUME com DIFICULDADE ao escrever >= 1.0. A consequencia e um buraco real do desenho, registrado no spec: nenhuma pergunta do roteamento captura volume. Quem deveria responder por ele sao o teto de turnos e o teto de custo, que hoje vem de configuracao e nao da tarefa."
     },
     {
       "nome": "fronteira: parece mecanica, exige entender o algoritmo",

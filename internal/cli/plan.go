@@ -39,6 +39,9 @@ type planOutput struct {
 	JevUSD      float64 `json:"custo_jev_usd"`
 	EvidenceIn  int     `json:"evidencias_recebidas"`
 	EvidenceOut int     `json:"evidencias_mantidas"`
+	Volume      float64 `json:"volume,omitempty"`
+	MaxTurns    int     `json:"max_turns,omitempty"`
+	CostCapUSD  float64 `json:"teto_usd,omitempty"`
 }
 
 // defaultRosterPath localiza o config/roster.yaml do modulo delegador pelo
@@ -158,6 +161,7 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	var (
 		dimensao  route.Dimensao
 		naoMedido bool
+		volume    float64
 	)
 	if verdict.Delegable {
 		path := *rosterF
@@ -183,7 +187,7 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			return 1
 		}
 
-		d, percentil, usage, err := route.Classificar(ctx, client, briefing)
+		cls, usage, err := route.Classificar(ctx, client, briefing)
 		if err != nil {
 			fmt.Fprintf(stderr, "plan: %v\n", err)
 			_ = job.Release(j.ID)
@@ -192,7 +196,7 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if err := ledger.Record("rota", usage); err != nil {
 			fmt.Fprintf(stderr, "plan: gravando jev.jsonl (rota): %v\n", err)
 		}
-		escolha, err := route.Escolher(elegiveis, d, percentil)
+		escolha, err := route.Escolher(elegiveis, cls.Dimensao, cls.Percentil)
 		if err != nil {
 			fmt.Fprintf(stderr, "plan: %v\n", err)
 			_ = job.Release(j.ID)
@@ -216,6 +220,12 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		// O registro da rota: a cascata eleva o corte sem repreguntar ao Jev.
 		j.Percentil, j.Dimensao = escolha.Percentil, string(escolha.Dimensao)
 		j.Autocontida = verdict.Autocontida
+		// O orcamento do laco sai do VOLUME, nao da complexidade: uma
+		// migracao trivial em trinta arquivos e barata por sitio e cara no
+		// total, e cravar 30 turnos para toda tarefa errava os dois extremos.
+		orc := route.OrcamentoPara(cls.Volume, route.OrcamentoBase())
+		j.MaxTurns, j.CostCapUSD = orc.Turnos, orc.TetoUSD
+		volume = cls.Volume
 		if err := j.Save(); err != nil {
 			fmt.Fprintf(stderr, "plan: %v\n", err)
 			_ = job.Release(j.ID)
@@ -228,6 +238,7 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		Verdict: verdict, JobID: j.ID, Briefing: j.Path("briefing.md"),
 		Model: j.Model, Dimensao: string(dimensao), NaoMedido: naoMedido,
 		JevUSD: usd, EvidenceIn: len(items), EvidenceOut: len(kept),
+		Volume: volume, MaxTurns: j.MaxTurns, CostCapUSD: j.CostCapUSD,
 	}
 
 	if *asJSON {
@@ -268,6 +279,10 @@ func renderPlan(w io.Writer, o planOutput) {
 	fmt.Fprintf(w, "tipo:        %s\n", o.Kind)
 	fmt.Fprintf(w, "evidencia:   %d recebidas, %d mantidas\n", o.EvidenceIn, o.EvidenceOut)
 	fmt.Fprintf(w, "autocontida: %.2f\n", o.Autocontida)
+	if o.MaxTurns > 0 {
+		fmt.Fprintf(w, "orcamento:   volume %.2f -> %d turnos, teto $%.2f\n",
+			o.Volume, o.MaxTurns, o.CostCapUSD)
+	}
 	fmt.Fprintf(w, "jev:         $%.5f\n", o.JevUSD)
 	if len(o.Warnings) > 0 {
 		fmt.Fprintf(w, "avisos:      %v\n", o.Warnings)

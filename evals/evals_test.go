@@ -25,6 +25,8 @@ type fixtureSet struct {
 			Dimensao        string   `json:"dimensao_dominante"`
 			ComplexidadeMin *float64 `json:"complexidade_minima"`
 			ComplexidadeMax *float64 `json:"complexidade_maxima"`
+			VolumeMin       *float64 `json:"volume_minimo"`
+			VolumeMax       *float64 `json:"volume_maximo"`
 		} `json:"esperado"`
 	} `json:"rota"`
 	Autonomia []struct {
@@ -75,6 +77,7 @@ func TestFixtures(t *testing.T) {
 		askRoute := map[string]jev.Question{
 			"dimensao_dominante": qs["dimensao_dominante"],
 			"complexidade":       qs["complexidade"],
+			"volume":             qs["volume"],
 		}
 		for _, f := range fx.Rota {
 			t.Run(f.Nome, func(t *testing.T) {
@@ -97,6 +100,19 @@ func TestFixtures(t *testing.T) {
 				}
 				if max := f.Esperado.ComplexidadeMax; max != nil && sa.Score > *max {
 					t.Errorf("complexidade = %.2f, acima da faixa rotulada <= %.2f", sa.Score, *max)
+				}
+				// Volume e eixo proprio: mede tamanho, nao dificuldade.
+				if f.Esperado.VolumeMin != nil || f.Esperado.VolumeMax != nil {
+					sv, ok := a.ScoreOf("volume")
+					if !ok {
+						t.Fatal("resposta sem volume")
+					}
+					if min := f.Esperado.VolumeMin; min != nil && sv.Score < *min {
+						t.Errorf("volume = %.2f, abaixo da faixa rotulada >= %.2f", sv.Score, *min)
+					}
+					if max := f.Esperado.VolumeMax; max != nil && sv.Score > *max {
+						t.Errorf("volume = %.2f, acima da faixa rotulada <= %.2f", sv.Score, *max)
+					}
 				}
 			})
 		}

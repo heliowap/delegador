@@ -292,6 +292,14 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return 1
 	}
+
+	// O teto de turnos vem do VOLUME medido no plan; a flag so vence quando
+	// o usuario a muda de fato, e o padrao de fabrica so quando o plan nao
+	// decidiu. Cravar 30 para toda tarefa errava os dois extremos.
+	turnosDoJob := *maxTurns
+	if *maxTurns == runMaxTurns && j.MaxTurns > 0 {
+		turnosDoJob = j.MaxTurns
+	}
 	// running num job recem-carregado so e legitimo com um executor vivo
 	// atras — a run.lock guarda o pid. Vivo: recusa, dois runs no mesmo job
 	// e duplo executor. Morto ou ausente: o run anterior morreu no meio —
@@ -442,6 +450,11 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		// ja nega a escrita, este sinal acusa o modelo insistindo nela.
 		preCfg := agent.DefaultPreConfig()
 		preCfg.Policy = policy
+		// Os tetos vem do volume medido no plan; a flag so entra quando o
+		// usuario a passa, e o padrao de fabrica so quando o plan nao decidiu.
+		if j.CostCapUSD > 0 {
+			preCfg.CostCapUSD = j.CostCapUSD
+		}
 		pre := agent.NewPrecondition(preCfg,
 			askerContado{jevClient, jevLedger, "precondicao", stderr},
 			func() float64 {
@@ -460,7 +473,7 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 		var runErr error
 		out, runErr = agent.Run(ctx, llmClient, reg,
-			agent.Config{Model: j.Model, MaxTurns: *maxTurns, Policy: policy},
+			agent.Config{Model: j.Model, MaxTurns: turnosDoJob, Policy: policy},
 			string(briefing)+contexto, vigia)
 		// Um registro por turno com o preco vigente na hora — os tokens
 		// sao os que a API reportou, nunca estimativa local (spec §9).

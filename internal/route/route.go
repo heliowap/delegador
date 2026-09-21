@@ -117,48 +117,66 @@ func Escolher(ms []roster.Model, d Dimensao, percentil float64) (Escolha, error)
 // Classificar pergunta ao Jev a dimensão dominante e a complexidade do
 // briefing, numa requisição só, e devolve a dimensão e o percentil de
 // corte pronto para Escolher.
-func Classificar(ctx context.Context, a Asker, briefing string) (Dimensao, float64, jev.Usage, error) {
+// Classificacao e o que a rota apura sobre a tarefa, em uma requisição só.
+// Dimensao e Percentil decidem QUAL modelo; Volume decide QUANTO ele pode
+// gastar chegando lá. São eixos distintos de propósito.
+type Classificacao struct {
+	Dimensao  Dimensao
+	Percentil float64
+	Volume    float64
+}
+
+func Classificar(ctx context.Context, a Asker, briefing string) (Classificacao, jev.Usage, error) {
 	// complexidade existe desde o v1; dimensao_dominante chega com as
 	// perguntas novas de rota — sem ela no conjunto não há o que perguntar.
 	qd, okD := jev.RouteQuestions()["dimensao_dominante"]
 	qc, okC := jev.RouteQuestions()["complexidade"]
-	if !okD || !okC {
-		return "", 0, jev.Usage{}, fmt.Errorf("route: perguntas de rota ausentes em jev.RouteQuestions "+
-			"(dimensao_dominante=%v, complexidade=%v)", okD, okC)
+	qv, okV := jev.RouteQuestions()["volume"]
+	if !okD || !okC || !okV {
+		return Classificacao{}, jev.Usage{}, fmt.Errorf("route: perguntas de rota ausentes em jev.RouteQuestions "+
+			"(dimensao_dominante=%v, complexidade=%v, volume=%v)", okD, okC, okV)
 	}
 	sc, ok := qc.(jev.Score)
 	if !ok || len(sc.Criteria) < 2 {
-		return "", 0, jev.Usage{}, fmt.Errorf("route: complexidade não é um Score de níveis")
+		return Classificacao{}, jev.Usage{}, fmt.Errorf("route: complexidade não é um Score de níveis")
 	}
 
 	state := map[string]any{"tarefa": map[string]any{"texto": briefing}}
 	res, err := a.Ask(ctx, state, map[string]jev.Question{
 		"dimensao_dominante": qd,
 		"complexidade":       qc,
+		"volume":             qv,
 	})
 	if err != nil {
-		return "", 0, jev.Usage{}, fmt.Errorf("route: %w", err)
+		return Classificacao{}, jev.Usage{}, fmt.Errorf("route: %w", err)
 	}
 
 	ch, ok := res.Answers.ChoiceOf("dimensao_dominante")
 	if !ok {
-		return "", 0, res.Usage, fmt.Errorf("route: resposta sem dimensao_dominante")
+		return Classificacao{}, res.Usage, fmt.Errorf("route: resposta sem dimensao_dominante")
 	}
 	d := Dimensao(ch.Choice)
 	switch d {
 	case Mecanica, Raciocinio, Agentica:
 	default:
-		return "", 0, res.Usage, fmt.Errorf("route: dimensão desconhecida %q", ch.Choice)
+		return Classificacao{}, res.Usage, fmt.Errorf("route: dimensão desconhecida %q", ch.Choice)
 	}
 
 	sa, ok := res.Answers.ScoreOf("complexidade")
 	if !ok {
-		return "", 0, res.Usage, fmt.Errorf("route: resposta sem complexidade")
+		return Classificacao{}, res.Usage, fmt.Errorf("route: resposta sem complexidade")
 	}
 	// O Score é a posição esperada entre os níveis, de 0 a n-1 — dividir
 	// pelo último nível o normaliza para o corte em [0,1].
 	percentil := min(1, max(0, sa.Score/float64(len(sc.Criteria)-1)))
-	return d, percentil, res.Usage, nil
+
+	// Volume ausente não invalida a rota: cai no nível 1, que é a âncora do
+	// orçamento base. Perder o ajuste de tamanho é pior que parar o trabalho.
+	volume := 1.0
+	if sv, ok := res.Answers.ScoreOf("volume"); ok {
+		volume = sv.Score
+	}
+	return Classificacao{Dimensao: d, Percentil: percentil, Volume: volume}, res.Usage, nil
 }
 
 // indexOf devolve a coluna de benchmark da dimensão. Chamado só com

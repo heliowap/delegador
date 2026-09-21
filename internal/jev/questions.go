@@ -127,6 +127,15 @@ func RouteQuestions() map[string]Question {
 				"agentica":   "O que falta saber NAO ESTA em arquivo nenhum: so passa a existir quando algo roda. Em que etapa um script para, o que um servico responde, qual saida um comando produz nesta maquina — nenhuma leitura de codigo revela isso, e cada execucao muda o passo seguinte. Extensao sozinha NAO e agentica: uma migracao mecanica repetida em dezenas de pontos continua mecanica, e o custo dela aparece na complexidade, nao aqui. Nao basta a tarefa pedir teste e lint: toda tarefa deste sistema pede, e isso nao distingue nenhuma.",
 			},
 		},
+		"volume": Score{
+			Instructions: "Avalie QUANTO TRABALHO a tarefa em `tarefa.texto` representa: em quantos pontos distintos e preciso mexer, e quantos ciclos de editar-e-conferir ela exige. Isto nao e dificuldade — uma mudanca trivial repetida em trinta arquivos e facil e volumosa, e uma unica linha sutil e dificil e pequena. Julgue so o tamanho. Ignore a rotina de escrever teste, confirmar vermelho e confirmar verde: toda tarefa deste sistema a tem, e ela nao distingue nenhuma.",
+			Criteria: []string{
+				"Um ponto so: uma funcao, uma constante, uma condicao. Quem executa abre um arquivo, muda o que precisa e acabou.",
+				"Poucos pontos que andam juntos: uma funcao e seus dois ou tres chamadores, ou uma mudanca mais o ajuste que ela obriga no mesmo pacote.",
+				"Uma duzia de pontos espalhados por varios pacotes, cada um pequeno, com conferencia entre eles para nao quebrar o caminho.",
+				"Dezenas de pontos, ou uma sequencia longa em que cada etapa precisa ser verificada antes da proxima comecar; terminar exige muitas idas e vindas, mesmo que cada uma seja simples.",
+			},
+		},
 		"complexidade": Score{
 			Instructions: "Avalie quanto raciocinio a tarefa em `tarefa.texto` exige de quem for executa-la, considerando o que precisa ser entendido antes de escrever a primeira linha.",
 			Criteria: []string{

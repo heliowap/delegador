@@ -60,6 +60,11 @@ type Job struct {
 	LintCmd   string   `json:"lint_cmd"`
 	TestGlobs []string `json:"test_globs"`
 
+	// Orçamento do laço, decidido pelo volume da tarefa no plan. Zero
+	// significa "não decidido": o run cai no padrão de fábrica.
+	MaxTurns   int     `json:"max_turns"`
+	CostCapUSD float64 `json:"cost_cap_usd"`
+
 	// O registro da rota: a cascata re-roteia a partir de Percentil sem
 	// repreguntar ao Jev, e o relatorio explica a escolha sem refazer a conta.
 	Percentil   float64 `json:"percentil"`
