@@ -138,7 +138,7 @@ func TestDeniesCredentialInArgument(t *testing.T) {
 	p := policy(t)
 	for _, cmd := range []string{
 		"go test -token=sk-or-v1-abc123",
-		"go build --api-key ncm3EFS9HN9I",
+		"go build --api-key CHAVE-FICTICIA-DE-TESTE",
 	} {
 		if Allow(Call{Name: "exec", Args: map[string]string{"command": cmd}}, p).Allowed {
 			t.Errorf("credencial em argumento aceita: %q", cmd)
