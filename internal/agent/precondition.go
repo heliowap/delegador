@@ -238,6 +238,7 @@ type resultDigest struct {
 type turnDigest struct {
 	Index      int            `json:"index"`
 	Texto      string         `json:"texto,omitempty"`
+	Raciocinio string         `json:"raciocinio,omitempty"`
 	Chamadas   []callDigest   `json:"chamadas,omitempty"`
 	Resultados []resultDigest `json:"resultados,omitempty"`
 }
@@ -257,7 +258,11 @@ func clip(s string) string {
 }
 
 func digest(t Turn) turnDigest {
-	d := turnDigest{Index: t.Index, Texto: clip(t.Message.Content)}
+	// O raciocinio entra quando o endpoint o devolve: o watchdog julga o
+	// que o modelo pensou, nao so o que ele fez — um turno que repete a
+	// mesma cadeia de pensamento e sem_progresso mesmo sem chamada igual.
+	d := turnDigest{Index: t.Index, Texto: clip(t.Message.Content),
+		Raciocinio: clip(t.Message.ReasoningContent)}
 	for _, c := range t.Message.ToolCalls {
 		args := make(map[string]string, len(c.Args))
 		for k, v := range c.Args {

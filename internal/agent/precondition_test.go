@@ -4,6 +4,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/heliowap/delegador/internal/jev"
@@ -112,5 +113,30 @@ func TestNilAskerDisablesOnlySemanticSignal(t *testing.T) {
 	pre := NewPrecondition(cfg, nil, func() float64 { return 0 })
 	if v := pre(turnsRepeating(5)); v != nil {
 		t.Errorf("sem Asker e sem repeticao, nao ha veto: %+v", v)
+	}
+}
+
+// O watchdog julga o raciocinio quando o endpoint o devolve — o digest da
+// janela tem que carrega-lo ate o state do Jev, ou a pre-condicao julga
+// cega de um sinal que a spec manda usar (§6.3).
+func TestDigestCarriesReasoningToWindowState(t *testing.T) {
+	turn := Turn{Index: 0, Message: llm.Message{
+		Content:          "vou rodar o teste",
+		ReasoningContent: "o teste prova o defeito antes da correcao",
+		ToolCalls:        []tools.Call{{Name: "exec", Args: map[string]string{"command": "go test ./..."}}},
+	}}
+
+	d := digest(turn)
+	if d.Raciocinio != "o teste prova o defeito antes da correcao" {
+		t.Fatalf("digest perdeu o raciocinio: %+v", d)
+	}
+
+	state, err := windowState([]Turn{turn}, jev.WatchdogQuestions())
+	if err != nil {
+		t.Fatalf("windowState: %v", err)
+	}
+	raw, _ := json.Marshal(state)
+	if !strings.Contains(string(raw), `"raciocinio":"o teste prova o defeito antes da correcao"`) {
+		t.Errorf("o state do Jev nao carrega o raciocinio: %s", raw)
 	}
 }

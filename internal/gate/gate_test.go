@@ -3,6 +3,7 @@ package gate
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/heliowap/delegador/internal/jev"
@@ -132,6 +133,49 @@ func TestCheckSurfacesAutocontida(t *testing.T) {
 	}
 	if !v.Delegable {
 		t.Error("autocontencao baixa nao reprova: nao e item do gate")
+	}
+}
+
+// dropAsker embrulha o fake removendo ids da resposta — simula a API
+// devolvendo a requisicao sem uma pergunta respondida.
+type dropAsker struct {
+	inner fakeAsker
+	drop  map[string]bool
+}
+
+func (d dropAsker) Ask(ctx context.Context, state any, qs map[string]jev.Question) (jev.Result, error) {
+	res, err := d.inner.Ask(ctx, state, qs)
+	for id := range d.drop {
+		delete(res.Answers, id)
+	}
+	return res, err
+}
+
+// Resposta que pesa na decisao nao pode faltar: ausente nao e "passou",
+// e erro — aprovar em cima de resposta cortada e o que o gate evita.
+func TestCheckFailsClosedOnMissingAnswer(t *testing.T) {
+	for _, id := range []string{"desenho_em_aberto", "tipo_de_tarefa", "pede_relatorio", "tarefa_autocontida"} {
+		a := dropAsker{inner: healthyAsker(), drop: map[string]bool{id: true}}
+		v, _, err := Check(context.Background(), a, "tarefa", "briefing", RepoFacts{})
+		if err == nil {
+			t.Fatalf("resposta ausente de %s tinha que ser erro, nao veredito %+v", id, v)
+		}
+		if !strings.Contains(err.Error(), id) {
+			t.Errorf("o erro tinha que nomear a resposta ausente %s: %v", id, err)
+		}
+	}
+}
+
+// Os avisos sao opcionais de verdade: faltar cruza_pacotes ou defeito_unico
+// nao reprova nem derruba o gate — a decisao segue com o autor.
+func TestCheckTreatsWarningsAsOptional(t *testing.T) {
+	a := dropAsker{inner: healthyAsker(), drop: map[string]bool{"cruza_pacotes": true, "defeito_unico": true}}
+	v, _, err := Check(context.Background(), a, "tarefa", "briefing", RepoFacts{})
+	if err != nil {
+		t.Fatalf("aviso ausente nao pode derrubar o gate: %v", err)
+	}
+	if !v.Delegable {
+		t.Error("sem os avisos a tarefa saudavel continua delegavel")
 	}
 }
 

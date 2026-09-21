@@ -81,6 +81,26 @@ func Check(ctx context.Context, a Asker, task, briefing string, facts RepoFacts)
 		return Verdict{}, jev.Usage{}, fmt.Errorf("gate: %w", err)
 	}
 
+	// Fecha a porta: toda resposta que pesa na decisao tem que estar
+	// presente e no tipo certo. Ausente ou malformada nao e "passou" — e
+	// resposta cortada, bug ou API manca, e aprovar em cima dela e o que o
+	// gate existe para impedir. So os avisos (cruza_pacotes, defeito_unico)
+	// ficam opcionais.
+	if _, ok := res.Answers.ChoiceOf("tipo_de_tarefa"); !ok {
+		return Verdict{}, res.Usage, fmt.Errorf("gate: resposta ausente: tipo_de_tarefa")
+	}
+	requiredNouls := []string{"desenho_em_aberto", "toca_sensivel",
+		"criterio_de_pronto", "tarefa_autocontida"}
+	for id := range jev.BriefingQuestions() {
+		requiredNouls = append(requiredNouls, id)
+	}
+	sort.Strings(requiredNouls)
+	for _, id := range requiredNouls {
+		if _, ok := res.Answers.NoulOf(id); !ok {
+			return Verdict{}, res.Usage, fmt.Errorf("gate: resposta ausente: %s", id)
+		}
+	}
+
 	v := Verdict{Delegable: true}
 
 	if ch, ok := res.Answers.ChoiceOf("tipo_de_tarefa"); ok {
