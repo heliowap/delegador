@@ -1222,17 +1222,29 @@ git add internal/roster && git commit -m "feat: roster com elegibilidade explica
 
 ### Task 9: Rota
 
+> **Atualizado depois da execução.** A rota cresceu dois eixos que este plano
+> não previa — `volume`, que decide o orçamento (§6.2 do spec), e o piso de
+> autocontenção, que decide qual modelo quando a tarefa tem decisão em aberto.
+> As assinaturas abaixo são as que existem hoje. Os testes desta tarefa não
+> mudaram: `Escolher` manteve a forma original e delega para `EscolherCom`,
+> justamente para não tocar no oráculo.
+
 **Files:**
-- Create: `internal/route/route.go`
-- Test: `internal/route/route_test.go`
+- Create: `internal/route/route.go`, `internal/route/orcamento.go`
+- Test: `internal/route/route_test.go`, `internal/route/orcamento_test.go`, `internal/route/autocontencao_test.go`, `internal/route/piso_roster_test.go`
 
 **Interfaces:**
-- Consumes: `roster.Model` (Task 8), `jev` (v1).
+- Consumes: `roster.Model` (Task 8), `jev` (v1), `gate.Verdict.Autocontida` (Task 12).
 - Produces:
   - `route.Dimensao` — `Mecanica`, `Raciocinio`, `Agentica`.
   - `route.Escolha{Modelo roster.Model; Dimensao Dimensao; Percentil float64; NaoMedido bool; Motivo string}`
-  - `route.Escolher(ms []roster.Model, d Dimensao, percentil float64) (Escolha, error)`
-  - `route.Classificar(ctx, a Asker, briefing string) (Dimensao, float64, jev.Usage, error)` — Jev responde `dimensao_dominante` e `complexidade`; o Score vira percentil.
+  - `route.Escolher(ms []roster.Model, d Dimensao, percentil float64) (Escolha, error)` — rota sem ajuste; delega para `EscolherCom` com opções zeradas.
+  - `route.Opcoes{Autocontida float64}` e `route.EscolherCom(ms, d, percentil, opts) (Escolha, error)`.
+  - `route.LimiarAutocontida = 0.625` — **calibrado** contra as fixtures de `evals/`; abaixo dele o preço deixa de decidir sozinho.
+  - `route.PisoTauMinimo = 0.50` — percentil mínimo de `tau_bench` numa tarefa ambígua. **Não calibrável por fixture**: não é corte sobre resposta do Jev, é percentil dentro do roster. O que o sustenta é o efeito no roster real, fixado em teste.
+  - `route.Classificacao{Dimensao Dimensao; Percentil float64; Volume float64}`
+  - `route.Classificar(ctx, a Asker, briefing string) (Classificacao, jev.Usage, error)` — Jev responde `dimensao_dominante`, `complexidade` e `volume` numa requisição.
+  - `route.Orcamento{Turnos int; TetoUSD float64; TurnosOciosos int}`, `route.OrcamentoBase()` e `route.OrcamentoPara(volume float64, base Orcamento) Orcamento`.
 
 - [ ] **Step 1: Escrever o teste que falha**
 
@@ -1335,6 +1347,12 @@ func TestSemCandidatoDaErro(t *testing.T) {
 - [ ] **Step 2: Vermelho, implementar, verde**
 
 Guia: percentil é posição **dentro dos candidatos**, calculada por ordenação no índice da dimensão — nunca valor absoluto, porque `coding_index` e `agentic_index` vivem em escalas diferentes. Modelos sem benchmark saem do cálculo do percentil (senão distorcem a distribuição) e entram na lista final marcados. Se ninguém passar o corte, use o melhor disponível e registre no `Motivo` — devolver erro aqui pararia o trabalho por excesso de zelo.
+
+Sobre o piso de autocontenção, três armadilhas que custaram tempo na execução:
+
+1. **Os dois cortes se intersectam, não se encadeiam.** Filtrar por `tau_bench` e então aplicar o percentil da dimensão recalcula a posição dentro do subconjunto e exclui quem deveria passar. Calcule os dois sobre o conjunto inteiro e cruze no fim.
+2. **O piso de ambiguidade não herda o percentil da complexidade.** Use `max(percentil, PisoTauMinimo)`: uma tarefa simples e ambígua teria corte baixo e ficaria sem piso nenhum, e essa é a combinação mais perigosa.
+3. **Sem nota sai da disputa em tarefa ambígua, mas nunca trava o trabalho.** Se for o único disponível, use e diga no `Motivo` que a escolha foi às cegas.
 
 - [ ] **Step 3: Commit**
 
