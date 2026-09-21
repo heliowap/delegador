@@ -433,3 +433,43 @@ nada.
 **A lição de método sobrevive ao caso:** medir uma pergunta contra uma
 reconstrução do estado, em vez do estado que o sistema monta, esconde o
 defeito e produz confiança injustificada.
+
+### O que só apareceu usando o artefato em trabalho real
+
+Em 2026-09-21 o delegador foi posto para executar tarefas do plano v1 com a
+implementação removida — os testes do plano no disco, o modelo autorando
+apenas o código. Quatro defeitos apareceram, e **nenhum deles seria pego por
+teste unitário**, porque os quatro exigem trabalho de tamanho real.
+
+**A tolerância de ociosidade não escalava.** Numa tarefa de volume 2,01, com
+60 turnos concedidos, o modelo gastou 10 turnos lendo o contrato e os testes
+antes da primeira escrita, e o sinal `sem_escrita` — fixo em 10 — o matou no
+turno 10 de 60. O limiar estava calibrado para "corrija um defeito", onde se
+lê dois arquivos e edita. Autorar exige ler antes de escrever, e o volume já
+sabia que a tarefa era grande. `TurnosOciosos` passou a escalar junto com
+turnos e custo.
+
+**Duas etapas discordavam entre si.** A seleção de evidência descartou a fonte
+do contrato — manteve 2 de 3 itens numa execução e 1 de 3 na seguinte — e o
+gate `cita_fonte_do_contrato` reprovou por falta dela. O selecionador podia
+jogar fora justamente o item que um gate bloqueante exige. Não é julgamento, é
+acoplamento, e virou garantia em código: quando nenhum item de um tipo exigido
+sobrevive, o melhor pontuado daquele tipo volta. Sem item do tipo, nada é
+inventado.
+
+**`gitx` deixava o índice sujo.** `Diff` e `DiffStat` rodam `git add -AN`, que
+é o que faz arquivo novo aparecer no diff, e nunca desfaziam. O companion
+terminava deixando o repositório do usuário com arquivos em *intent-to-add* —
+e nesse estado `git clean` não remove e `git checkout -- .` **trunca para zero
+byte**. Numa medição real, uma tarefa herdou dois arquivos vazios da execução
+anterior e falhou por um motivo que não era dela. Agora o efeito é desfeito,
+mas só quando nada estava staged antes: índice ocupado é trabalho de outra
+pessoa.
+
+**E um defeito que não era do artefato, e vale igual.** O arnês de medição
+passava `go test ./...` como comando de teste **e** como suíte, deixando a
+seção de Comandos do briefing com a mesma linha repetida; o gate
+`comandos_copiaveis` reprovou duas tarefas. O gate estava certo — aquilo não
+é instrução copiável, é ruído. Vale registrar porque mostra que os gates
+pegam briefing ruim mesmo quando quem o escreveu foi o próprio autor do
+sistema.
