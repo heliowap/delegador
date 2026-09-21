@@ -66,6 +66,11 @@ type Opcoes struct {
 	//
 	// Zero significa "nao informado" e preserva o comportamento antigo.
 	Autocontida float64
+
+	// ConfiancaDimensao e a confianca da Choice dimensao_dominante. Abaixo
+	// de LimiarConfiancaDimensao o corte passa a exigir os tres indices.
+	// Zero significa "nao informado" e preserva o comportamento antigo.
+	ConfiancaDimensao float64
 }
 
 // LimiarAutocontida e o corte abaixo do qual a rota deixa de decidir so por
@@ -107,6 +112,23 @@ const LimiarAutocontida = 0.625
 // mudar de forma que esse teste quebre, o numero precisa ser revisto — e nao
 // o teste.
 const PisoTauMinimo = 0.50
+
+// LimiarConfiancaDimensao e o corte abaixo do qual a rota deixa de confiar
+// na dimensao escolhida. Acima dele o corte de percentil vale no indice
+// daquela dimensao; abaixo, o candidato precisa passar o corte nos TRES
+// indices — se nao sabemos qual capacidade a tarefa exige, o modelo tem de
+// estar acima da linha em todas.
+//
+// NAO CALIBRADO. O valor vem da orientacao da documentacao do Jev, que usa
+// 0.6 como piso abaixo do qual a resposta nao sustenta acao automatica.
+// Calibra-lo exige confianca gravada junto com o desfecho do job, que so
+// passou a ser guardada agora (Classificacao.Bruto): os oito jogos de
+// 2026-09-21 rodaram descartando esse numero.
+const LimiarConfiancaDimensao = 0.6
+
+// LimiarConfiancaScore e o corte equivalente para o Score de complexidade.
+// Mesmo valor, mesma origem, e a mesma ausencia de calibragem.
+const LimiarConfiancaScore = 0.6
 
 // Escolher mantem a assinatura original: rota sem ajuste de autocontencao.
 func Escolher(ms []roster.Model, d Dimensao, percentil float64) (Escolha, error) {
@@ -177,13 +199,38 @@ func EscolherCom(ms []roster.Model, d Dimensao, percentil float64, opts Opcoes) 
 	sort.SliceStable(measured, func(i, j int) bool {
 		return indexOf(measured[i], d) < indexOf(measured[j], d)
 	})
+	// Dimensao escolhida sem confianca: o corte deixa de valer so no indice
+	// dela. Se nao sabemos qual capacidade a tarefa exige, o candidato
+	// precisa estar acima da linha nos TRES indices — cortar por um eixo
+	// escolhido no chute e pior que nao cortar.
+	var emTodosOsEixos map[string]bool
+	if c := opts.ConfiancaDimensao; c > 0 && c < LimiarConfiancaDimensao && len(measured) > 1 {
+		emTodosOsEixos = map[string]bool{}
+		for _, m := range measured {
+			emTodosOsEixos[m.ID] = true
+		}
+		for _, eixo := range []Dimensao{Mecanica, Raciocinio, Agentica} {
+			for _, id := range abaixoDoCorte(measured, eixo, percentil) {
+				delete(emTodosOsEixos, id)
+			}
+		}
+		if len(emTodosOsEixos) == 0 {
+			emTodosOsEixos = nil // ninguem passa em tudo: vale o corte da dimensao
+		} else {
+			motivoAmbiguidade = juntaMotivo(motivoAmbiguidade, fmt.Sprintf(
+				"dimensao %s escolhida com confianca %.2f: corte exigido nos tres indices, %d de %d passaram",
+				d, opts.ConfiancaDimensao, len(emTodosOsEixos), len(measured)))
+		}
+	}
+
 	var passing []roster.Model
 	for i, m := range measured {
 		pos := 1.0
 		if len(measured) > 1 {
 			pos = float64(i) / float64(len(measured)-1)
 		}
-		if pos >= percentil && (pisoTau == nil || pisoTau[m.ID]) {
+		if pos >= percentil && (pisoTau == nil || pisoTau[m.ID]) &&
+			(emTodosOsEixos == nil || emTodosOsEixos[m.ID]) {
 			passing = append(passing, m)
 		}
 	}
@@ -234,6 +281,22 @@ type Classificacao struct {
 	Dimensao  Dimensao
 	Percentil float64
 	Volume    float64
+
+	// ConfiancaDimensao e a confianca da Choice que escolheu o eixo. Baixa
+	// significa que o indice sobre o qual o corte vai operar e chute, e o
+	// corte deixa de valer so nele — ver LimiarConfiancaDimensao.
+	ConfiancaDimensao float64
+	// ConfiancaComplexidade e a concentracao da distribuicao do Score.
+	// Baixa significa massa espalhada entre niveis, e o percentil sobe
+	// para o nivel seguinte: errar para cima custa um modelo melhor,
+	// errar para baixo custa o run inteiro.
+	ConfiancaComplexidade float64
+
+	// Bruto sao as respostas inteiras — probabilidade, confianca e
+	// distribuicao de cada pergunta, inclusive os atomos de complexidade
+	// que ainda nao decidem nada. Guardadas para que mudar um peso da rota
+	// seja uma conta sobre os jobs ja rodados, e nao uma nova rodada.
+	Bruto jev.Answers
 }
 
 func Classificar(ctx context.Context, a Asker, briefing string) (Classificacao, jev.Usage, error) {
@@ -251,12 +314,23 @@ func Classificar(ctx context.Context, a Asker, briefing string) (Classificacao, 
 		return Classificacao{}, jev.Usage{}, fmt.Errorf("route: complexidade não é um Score de níveis")
 	}
 
-	state := map[string]any{"tarefa": map[string]any{"texto": briefing}}
-	res, err := a.Ask(ctx, state, map[string]jev.Question{
+	// Os atomos de complexidade vao no mesmo request: perguntas
+	// independentes sobre o mesmo state sao avaliadas em paralelo, entao
+	// coleta-los nao custa ida a rede nem tempo de resposta.
+	perguntas := map[string]jev.Question{
 		"dimensao_dominante": qd,
 		"complexidade":       qc,
 		"volume":             qv,
-	})
+	}
+	todas := jev.RouteQuestions()
+	for _, id := range []string{"alcance", "acoplamento", "sutileza"} {
+		if q, ok := todas[id]; ok {
+			perguntas[id] = q
+		}
+	}
+
+	state := map[string]any{"tarefa": map[string]any{"texto": briefing}}
+	res, err := a.Ask(ctx, state, perguntas)
 	if err != nil {
 		return Classificacao{}, jev.Usage{}, fmt.Errorf("route: %w", err)
 	}
@@ -278,7 +352,18 @@ func Classificar(ctx context.Context, a Asker, briefing string) (Classificacao, 
 	}
 	// O Score é a posição esperada entre os níveis, de 0 a n-1 — dividir
 	// pelo último nível o normaliza para o corte em [0,1].
-	percentil := min(1, max(0, sa.Score/float64(len(sc.Criteria)-1)))
+	//
+	// Confianca baixa significa massa espalhada entre niveis: a media nao
+	// representa nenhum deles. Nesse caso a posicao sobe para o nivel
+	// seguinte antes de normalizar. Os dois erros custam coisas diferentes
+	// — pedir um modelo melhor do que o necessario custa tokens; pedir um
+	// pior custa o run inteiro — e e por isso que o arredondamento e para
+	// cima, e nao para o mais proximo.
+	nivel := sa.Score
+	if sa.Confidence > 0 && sa.Confidence < LimiarConfiancaScore {
+		nivel = math.Min(math.Ceil(sa.Score), float64(len(sc.Criteria)-1))
+	}
+	percentil := min(1, max(0, nivel/float64(len(sc.Criteria)-1)))
 
 	// Volume ausente não invalida a rota: cai no nível 1, que é a âncora do
 	// orçamento base. Perder o ajuste de tamanho é pior que parar o trabalho.
@@ -286,7 +371,9 @@ func Classificar(ctx context.Context, a Asker, briefing string) (Classificacao, 
 	if sv, ok := res.Answers.ScoreOf("volume"); ok {
 		volume = sv.Score
 	}
-	return Classificacao{Dimensao: d, Percentil: percentil, Volume: volume}, res.Usage, nil
+	return Classificacao{Dimensao: d, Percentil: percentil, Volume: volume,
+		ConfiancaDimensao: ch.Confidence, ConfiancaComplexidade: sa.Confidence,
+		Bruto: res.Answers}, res.Usage, nil
 }
 
 // indexOf devolve a coluna de benchmark da dimensão. Chamado só com
@@ -357,4 +444,39 @@ func comPisoDeTau(ms []roster.Model, percentil float64) []roster.Model {
 		}
 	}
 	return passa
+}
+
+// abaixoDoCorte lista quem NAO alcanca o percentil no indice deste eixo. A
+// posicao e sempre calculada sobre o conjunto inteiro: filtrar antes
+// recalcularia o percentil dentro do subconjunto e excluiria quem deveria
+// passar — o mesmo erro que o piso de tau evita marcando em vez de reduzir.
+func abaixoDoCorte(ms []roster.Model, d Dimensao, percentil float64) []string {
+	ordenado := append([]roster.Model(nil), ms...)
+	sort.SliceStable(ordenado, func(i, j int) bool {
+		return indexOf(ordenado[i], d) < indexOf(ordenado[j], d)
+	})
+	var fora []string
+	for i, m := range ordenado {
+		pos := 1.0
+		if len(ordenado) > 1 {
+			pos = float64(i) / float64(len(ordenado)-1)
+		}
+		if pos < percentil {
+			fora = append(fora, m.ID)
+		}
+	}
+	return fora
+}
+
+// juntaMotivo encadeia motivos sem perder o primeiro: a rota pode ter
+// aplicado piso de tau E corte em todos os eixos, e o relatorio precisa
+// dizer os dois.
+func juntaMotivo(a, b string) string {
+	switch {
+	case a == "":
+		return b
+	case b == "":
+		return a
+	}
+	return a + "; " + b
 }

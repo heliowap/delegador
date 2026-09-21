@@ -200,11 +200,22 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if err := ledger.Record("rota", usage); err != nil {
 			fmt.Fprintf(stderr, "plan: gravando jev.jsonl (rota): %v\n", err)
 		}
-		// A autocontencao entra na rota, nao so no relatorio: tarefa com decisao
-		// em aberto exige modelo que sustente o enquadramento, e preco deixa de
-		// ser o unico criterio entre os baratos.
+		// As respostas inteiras vao para o disco antes de qualquer decisao:
+		// probabilidade, confianca e distribuicao de cada pergunta, mais os
+		// atomos de complexidade que ainda nao decidem nada. E o que permite
+		// mudar um peso da rota e refazer a conta sobre os jobs ja rodados,
+		// em vez de reexecutar. Falhar ao gravar nao para o plano — o job
+		// perde a auditoria, nao o trabalho.
+		gravaClassificacao(j.Path("classificacao.json"), cls, stderr)
+
+		// Dois ajustes que nao vem da dimensao: a autocontencao, porque
+		// tarefa com decisao em aberto exige modelo que sustente o
+		// enquadramento sozinho; e a CONFIANCA da propria escolha de
+		// dimensao, porque cortar por um eixo escolhido no chute e pior que
+		// nao cortar.
 		escolha, err := route.EscolherCom(elegiveis, cls.Dimensao, cls.Percentil,
-			route.Opcoes{Autocontida: verdict.Autocontida})
+			route.Opcoes{Autocontida: verdict.Autocontida,
+				ConfiancaDimensao: cls.ConfiancaDimensao})
 		if err != nil {
 			fmt.Fprintf(stderr, "plan: %v\n", err)
 			_ = job.Release(j.ID)

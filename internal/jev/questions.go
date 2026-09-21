@@ -6,9 +6,16 @@ import "fmt"
 // enviado ao modelo, entao cada pergunta carrega o significado inteiro no
 // texto. Cada conjunto tem fixture rotulada correspondente em evals/.
 
-// QuestionsVersion muda sempre que o texto de uma pergunta muda, para que a
-// auditoria em jev.jsonl continue interpretavel depois de uma recalibragem.
-const QuestionsVersion = "2"
+// QuestionsVersion muda sempre que o CONJUNTO de perguntas muda — texto
+// reescrito, pergunta nova, pergunta removida — para que a auditoria em
+// jev.jsonl e em classificacao.json continue interpretavel depois de uma
+// recalibragem. Comparar a confianca de dois jobs de versoes diferentes sem
+// saber disso e comparar respostas a perguntas diferentes.
+//
+// 3 (2026-09-21): entraram os atomos de complexidade — alcance, acoplamento
+// e sutileza. Os textos de dimensao_dominante, complexidade e volume nao
+// mudaram, entao as fixtures da versao 2 continuam valendo.
+const QuestionsVersion = "3"
 
 // DelegabilityQuestions julga se a tarefa deve ser delegada (spec §6.1).
 func DelegabilityQuestions() map[string]Question {
@@ -136,6 +143,44 @@ func RouteQuestions() map[string]Question {
 				"Poucos pontos que andam juntos: uma funcao e seus dois ou tres chamadores, ou uma mudanca mais o ajuste que ela obriga no mesmo pacote.",
 				"Uma duzia de pontos espalhados por varios pacotes, cada um pequeno, com conferencia entre eles para nao quebrar o caminho.",
 				"Dezenas de pontos, ou uma sequencia longa em que cada etapa precisa ser verificada antes da proxima comecar; terminar exige muitas idas e vindas, mesmo que cada uma seja simples.",
+			},
+		},
+		// Os tres atomos abaixo decompoem a complexidade em eixos que se
+		// medem separado. Vao no MESMO request que `complexidade`, entao
+		// nao custam ida a rede nem tempo de resposta, e hoje nao decidem
+		// nada: sao guardados crus em classificacao.json.
+		//
+		// Existem para tornar a rota recalibravel sem reexecutar inferencia.
+		// Com os atomos gravados e o desfecho de cada job rotulado — verde,
+		// vermelho, veto — mudar o peso de um eixo vira uma conta sobre os
+		// jobs ja rodados, e nao uma nova rodada de execucoes. E o unico
+		// caminho conhecido para calibrar PisoTauMinimo, que o spec declara
+		// nao calibravel por fixture justamente por falta desse dado.
+		"alcance": Score{
+			Instructions: "Avalie QUAO LONGE do sintoma esta a causa do problema descrito em `tarefa.texto`. Julgue so a distancia entre onde o defeito aparece e onde ele nasce — nao o tamanho da correcao, nem quantos lugares ela toca.",
+			Criteria: []string{
+				"A causa esta onde o sintoma aparece: quem le a linha que falha ja ve o que esta errado.",
+				"A causa esta a um salto: e preciso abrir a funcao chamada, ou quem chama, para ve-la.",
+				"A causa esta a varios saltos, em outro pacote ou outra camada, e o caminho ate ela precisa ser reconstruido.",
+				"Nao ha caminho direto do sintoma a causa: e preciso entender como o sistema se comporta para saber onde olhar.",
+			},
+		},
+		"acoplamento": Score{
+			Instructions: "Avalie QUANTAS PARTES do sistema precisam ser entendidas ao mesmo tempo para que a correcao da tarefa em `tarefa.texto` esteja certa. Julgue so o que precisa ser sustentado junto — nao a distancia ate a causa, nem o tamanho da mudanca.",
+			Criteria: []string{
+				"Uma parte so: a correcao se justifica olhando um trecho, sem consultar mais nada.",
+				"Duas partes que se encaixam: um contrato e quem o usa, uma funcao e o teste dela.",
+				"Um conjunto que so faz sentido junto: um fluxo de dados, uma maquina de estados, um protocolo entre camadas.",
+				"Partes que interagem de forma nao obvia, onde mexer numa muda o significado das outras.",
+			},
+		},
+		"sutileza": Score{
+			Instructions: "Avalie QUAO PROVAVEL e que a correcao obvia da tarefa em `tarefa.texto` esteja errada: que ela faca o sintoma sumir sem resolver a causa, ou trate o caso relatado e nao o caso geral. Julgue so o risco da solucao ingenua.",
+			Criteria: []string{
+				"A correcao obvia e a correcao certa: nao ha armadilha.",
+				"A correcao obvia funciona, mas ha casos de borda que precisam entrar junto.",
+				"A correcao obvia trata o sintoma e deixa a causa: e preciso resistir a ela para chegar na certa.",
+				"A correcao obvia introduz outro defeito — de concorrencia, de cache, de ordem, de compatibilidade — que so aparece depois.",
 			},
 		},
 		"complexidade": Score{
