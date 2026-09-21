@@ -21,8 +21,19 @@ func TestLoadReadsRealRoster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(ms) != 6 {
-		t.Fatalf("quero 6 modelos, tenho %d", len(ms))
+	// A contagem nao e fixa: o roster cresce quando um canal novo entra.
+	// O que tem de valer e que toda entrada tem id e conta — entrada sem
+	// conta nao pode virar atalho para ganhar a rota.
+	if len(ms) < 6 {
+		t.Fatalf("o roster encolheu para %d entradas", len(ms))
+	}
+	for _, m := range ms {
+		if m.ID == "" {
+			t.Error("entrada sem id")
+		}
+		if m.Conta.Nome == "" {
+			t.Errorf("%s nao declara conta", m.ID)
+		}
 	}
 	byID := map[string]Model{}
 	for _, m := range ms {
@@ -37,6 +48,22 @@ func TestLoadReadsRealRoster(t *testing.T) {
 	}
 	if glm.Sondado.TokensBase != 162 {
 		t.Errorf("TokensBase = %d, quero 162", glm.Sondado.TokensBase)
+	}
+	// O MESMO modelo noutro canal herda o benchmark pelo permaslug: repetir
+	// o bloco convidaria as copias a divergir.
+	outroCanal, ok := byID["cpa-ocgo-glm-5.3-flash"]
+	if !ok {
+		t.Fatal("o canal do opencode-go sumiu do roster")
+	}
+	if outroCanal.Permaslug != glm.Permaslug {
+		t.Fatalf("permaslugs diferentes: %q vs %q", outroCanal.Permaslug, glm.Permaslug)
+	}
+	if outroCanal.Benchmark == nil || outroCanal.Benchmark.TauBench != glm.Benchmark.TauBench {
+		t.Errorf("benchmark nao foi herdado pelo permaslug: %+v", outroCanal.Benchmark)
+	}
+	if outroCanal.Conta.Ordem() >= glm.Conta.Ordem() {
+		t.Errorf("o canal do plano Go (%d) deveria vir antes do pre-pago (%d)",
+			outroCanal.Conta.Ordem(), glm.Conta.Ordem())
 	}
 	swe := byID["devin/swe-2"]
 	if swe.Benchmark != nil {

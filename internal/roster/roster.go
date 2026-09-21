@@ -365,6 +365,28 @@ func parse(raw []byte) ([]Model, error) {
 		}
 	}
 
+	// Benchmark segue o MODELO, não a entrada: duas entradas com o mesmo
+	// permaslug são o mesmo peso em canais diferentes, e repetir o bloco
+	// inteiro convidaria a divergência entre as cópias. Quem tem permaslug
+	// e não declarou benchmark herda o de quem declarou.
+	//
+	// Só herda por permaslug. `benchmark: null` sem permaslug — o caso do
+	// swe-2, que é proprietário e não está em benchmark nenhum — continua
+	// sem benchmark, que é a verdade.
+	porSlug := map[string]*Benchmark{}
+	for i := range ms {
+		if ms[i].Permaslug != "" && ms[i].Benchmark != nil {
+			porSlug[ms[i].Permaslug] = ms[i].Benchmark
+		}
+	}
+	for i := range ms {
+		if ms[i].Benchmark == nil && ms[i].Permaslug != "" {
+			if b, ok := porSlug[ms[i].Permaslug]; ok {
+				ms[i].Benchmark = b
+			}
+		}
+	}
+
 	// Resolve as contas por nome. Nome desconhecido e erro: um typo
 	// silenciosamente virando "conta nao declarada" mudaria a preferencia
 	// da rota sem ninguem ver.

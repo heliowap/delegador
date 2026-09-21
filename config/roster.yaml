@@ -62,10 +62,103 @@ versao: 1
 as_of_benchmark: "2026-09-20T00:03:27Z"
 as_of_sondagem: "2026-09-20"
 
+# ---------------------------------------------------------------------------
+# contas: de onde sai a cota ou o dinheiro. Declarado por quem opera, porque
+# so quem opera sabe quanto cada pote aperta na pratica.
+#
+# `escassez` e a natureza do pote:
+#   promocao   — de graca ate a data em `ate`. Usa-se enquanto dura.
+#   assinatura — cota que renova sozinha. Marginal zero, mas esgotavel.
+#   pre_pago   — saldo em dolar. Nao volta sem alguem repor.
+#
+# `aperto` e observacao de USO, nao numero de fornecedor: uma franquia
+# nominalmente generosa que acaba em dois dias e "alto".
+#
+# `orquestrador: true` marca a conta em que a sessao que DELEGA esta rodando.
+# Ela vai por ultimo sempre — cada token que o executor gasta nela sai da
+# mesma janela em que quem esta conduzindo o trabalho precisa pensar.
+#
+# `prioridade: N` manda na ordem quando a derivacao nao serve. Menor vence.
+contas:
+  devin-pro-promo:
+    escassez: promocao
+    ate: "2026-09-30"        # SWE-2 ilimitado dentro do plano; quando acabar, muda
+  opencode-go:
+    escassez: assinatura
+    aperto: baixo            # limite mensal folgado no plano Go
+  antigravity:
+    escassez: assinatura
+    aperto: medio            # franquia semanal + janela de 5h
+  devin-pro:
+    escassez: assinatura
+    aperto: medio            # plano de US$ 20/mes, fora da promocao do SWE-2
+  fireworks:
+    escassez: pre_pago       # US$ 10
+  openrouter:
+    escassez: pre_pago       # saldo no fim; reponivel, mas nao automaticamente
+  claude-max:
+    escassez: assinatura
+    aperto: medio            # dura a semana COM alternancia consciente
+    orquestrador: true       # e a conta desta sessao
+  codex-pro:
+    escassez: assinatura
+    aperto: alto             # a cota semanal acaba em 2-3 dias
+#
+# Baseten (`cpa-bt-*`) NAO entra: sem credito e com limite de chamadas.
+# Fica registrado para que a proxima sondagem nao o redescubra como novidade.
+# ---------------------------------------------------------------------------
+
 modelos:
 
+  # ---- mesmos pesos, outros canais -------------------------------------
+  # Medido no proxy em 2026-09-21: glm-5.3-flash esta em cinco canais e
+  # deepseek-v4.1-flash em quatro, todos com tool calling funcionando. O
+  # benchmark e do MODELO e e herdado pelo permaslug — repetir o bloco
+  # convidaria as copias a divergir. O que muda entre as entradas e a conta.
+  #
+  # A latencia abaixo e de UMA sondagem, nao de uma media: serve para dizer
+  # que o canal responde, nao para ordenar canais entre si.
+  - id: cpa-ocgo-glm-5.3-flash
+    papel: barato
+    conta: opencode-go
+    permaslug: z-ai/glm-5.3-flash-20260826
+    mapeamento: exato
+    sondado:
+      tool_call: true
+      reasoning_content: true
+      tokens_base: 188
+      latencia_s: 15.7
+      em: "2026-09-21"
+    benchmark: null          # herdado do permaslug
+    humano:
+      custo_usd_por_mtok: 0.0    # cota do plano Go, nao cobranca por token
+      custo_saida_usd_por_mtok: 0.0
+      habilitado: true
+    nota: >
+      Mesmo peso do cpa-fw-glm-5.3-flash, na conta que aperta menos. Primeira
+      escolha entre os canais deste modelo enquanto o plano Go tiver folga.
+  - id: cpa-ocgo-deepseek-v4.1-flash
+    papel: barato
+    conta: opencode-go
+    permaslug: deepseek/deepseek-v4-flash-20260731
+    mapeamento: aproximado   # sondei v4.1-flash; o benchmark so tem v4-flash
+    sondado:
+      tool_call: true
+      reasoning_content: false
+      tokens_base: 321
+      latencia_s: 1.3
+      em: "2026-09-21"
+    benchmark: null          # herdado do permaslug
+    humano:
+      custo_usd_por_mtok: 0.0
+      custo_saida_usd_por_mtok: 0.0
+      habilitado: true
+    nota: >
+      O cpa-or-deepseek-v4.1-flash e o mesmo modelo saindo do saldo da
+      OpenRouter, que esta no fim. Este sai da cota do plano Go.
   - id: cpa-fw-glm-5.3-flash
     papel: barato
+    conta: fireworks
     permaslug: z-ai/glm-5.3-flash-20260826
     mapeamento: exato
     sondado:
@@ -126,6 +219,7 @@ modelos:
 
   - id: cpa-or-deepseek-v4.1-flash
     papel: barato
+    conta: openrouter
     permaslug: deepseek/deepseek-v4-flash-20260731
     mapeamento: aproximado   # sondei v4.1-flash; o benchmark só tem v4-flash
     sondado:
@@ -154,6 +248,7 @@ modelos:
 
   - id: devin/gemini-3-6-flash
     papel: barato
+    conta: devin-pro
     permaslug: google/gemini-3.6-flash-20260721
     mapeamento: exato
     sondado:
@@ -181,6 +276,7 @@ modelos:
 
   - id: claude-fable-5-1
     papel: forte
+    conta: claude-max
     permaslug: anthropic/claude-fable-5.1-20260831
     mapeamento: exato
     sondado:
@@ -211,6 +307,7 @@ modelos:
 
   - id: cpa-claude-opus-5(low)
     papel: forte
+    conta: claude-max
     permaslug: anthropic/claude-opus-5-20260723
     mapeamento: aproximado   # sondei o esforço (low); o benchmark não diz qual usou
     sondado:
@@ -239,6 +336,7 @@ modelos:
 
   - id: devin/swe-2
     papel: barato          # era `forte`; corrigido por evidência, ver nota
+    conta: devin-pro-promo
     permaslug: null
     mapeamento: ausente
     sondado:
