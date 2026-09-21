@@ -1,0 +1,262 @@
+{
+  "rota": [
+    {
+      "nome": "correcao mecanica descrita linha a linha",
+      "texto": "# Tarefa\n\nEm `pkg/svc/rota.go:42`, a condicao `if user.ID == \"\"` impede a resposta 401 que `docs/adr/0007.md` exige quando o token expira.\n\n## Correcao\n\nTroque a condicao por `if token.Expirado() { return ErrNaoAutorizado }` e adicione `TestRotaTokenExpirado` cobrindo o caso acima.\n\n```bash\ngo test ./pkg/svc/ -run TestRotaTokenExpirado\n```",
+      "esperado": {
+        "dimensao_dominante": "mecanica",
+        "complexidade_maxima": 1.0
+      }
+    },
+    {
+      "nome": "causa de sintoma ainda desconhecida",
+      "texto": "# Tarefa\n\nSob carga, o mesmo pagamento as vezes e processado duas vezes. A suspeita e uma janela entre a leitura do status e a atualizacao em `pkg/fila/`, mas a causa exata nao esta identificada.\n\n## Correcao\n\nDescubra onde a janela existe, corrija e prove com um teste que reproduz a duplicacao.",
+      "esperado": {
+        "dimensao_dominante": "raciocinio",
+        "complexidade_minima": 2.0
+      }
+    },
+    {
+      "nome": "sequencia de ferramentas ate o fim",
+      "texto": "# Tarefa\n\nO script `scripts/migrar.sh` falha em algum ponto ainda desconhecido.\n\n## Correcao\n\nRode o script, observe a saida, identifique em que etapa ele para, corrija e rode de novo ate completar; o ambiente responde a cada tentativa e o caminho so aparece executando.",
+      "esperado": {
+        "dimensao_dominante": "agentica",
+        "complexidade_minima": 1.0
+      }
+    },
+    {
+      "nome": "FALHA MEDIDA e2e: troca de sinal de um caractere",
+      "texto": "# Tarefa\n\nA funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.\n\nLocalizacao: pkg/mat/soma.go:5\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nfunc Soma(a, b int) int {\n\treturn a - b\n}\n```\n\n## Ordem de trabalho\n\n1. Escreva primeiro o teste que expoe este defeito.\n2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. Cole a saida da falha no relatorio.\n3. So entao corrija.\n4. Rode de novo e confirme o verde.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/ -run TestSoma\ngo test ./...\ngo vet ./...\n```\n\n## Limites\n\n- Nao faca commit e nao faca push.\n- Nao acesse a rede.\n- Trabalhe apenas nesta worktree.\n\n## Relatorio final\n\nAo terminar, responda com: o teste que voce escreveu, a mudanca feita arquivo por arquivo, e a saida literal dos comandos que voce executou, incluindo a do vermelho inicial.\n",
+      "esperado": {
+        "dimensao_dominante": "mecanica",
+        "complexidade_maxima": 1.0,
+        "volume_maximo": 0.8
+      },
+      "nota": "Em 2026-09-21 este briefing exato recebeu 'agentica'. Uma linha, defeito apontado com arquivo:linha, correcao obvia. Rota errada aqui compra modelo caro para trabalho trivial."
+    },
+    {
+      "nome": "mecanica: constante com valor errado",
+      "texto": "# Tarefa\n\nEm `internal/http/retry.go:18`, `maxBackoff` esta `30 * time.Second` e o ADR `docs/adr/0012.md` fixa 10 segundos.\n\n## Onde esta o defeito\n\n`internal/http/retry.go:18`:\n```\nconst maxBackoff = 30 * time.Second\n```\n\n## Ordem de trabalho\n\n1. Escreva o teste que expoe o valor errado.\n2. Confirme o vermelho.\n3. Corrija.\n\n```bash\ngo test ./internal/http/ -run TestBackoff\n```",
+      "esperado": {
+        "dimensao_dominante": "mecanica",
+        "complexidade_maxima": 1.0,
+        "volume_maximo": 1.0
+      }
+    },
+    {
+      "nome": "raciocinio: invariante nao obvia entre cache e expiracao",
+      "texto": "# Tarefa\n\nUsuarios relatam que, sob carga, algumas requisicoes com token expirado recebem 200. Nao reproduz com um request isolado.\n\n`internal/auth/cache.go` guarda a decisao de autorizacao por 60s. `internal/auth/token.go` confere a expiracao. Descubra por que a combinacao devolve 200 e corrija de modo que o cache nunca sobreviva a expiracao do token que o originou.\n\n```bash\ngo test ./internal/auth/\n```",
+      "esperado": {
+        "dimensao_dominante": "raciocinio",
+        "complexidade_minima": 2.0,
+        "volume_maximo": 1.8
+      },
+      "nota": "ORTOGONALIDADE, metade B: complexidade ALTA (janela de concorrencia entre dois arquivos) e volume BAIXO (poucos pontos). Par com a fixture da migracao."
+    },
+    {
+      "nome": "mecanica: migracao repetida em muitos pontos",
+      "texto": "# Tarefa\n\nA funcao `log.Printf` foi substituida por `slog.Info` em todo o repositorio. Restam 14 chamadas antigas, em 9 pacotes diferentes, listadas por:\n\n```bash\ngrep -rn 'log.Printf' --include='*.go' .\n```\n\nPara cada uma: converta a chamada, rode `go test ./<pacote>/` e confirme o verde antes de passar para a proxima. Nao agrupe as mudancas: uma de cada vez, com a suite verde entre elas.",
+      "esperado": {
+        "dimensao_dominante": "mecanica",
+        "complexidade_maxima": 2.0,
+        "volume_minimo": 2.0
+      },
+      "nota": "ORTOGONALIDADE, metade A: complexidade BAIXA (cada sitio e trivial) e volume ALTO (dezenas de sitios). Par com a fixture do cache. Se as duas passarem, os eixos estao separados de fato. ROTULO REVISADO em 2026-09-21, depois de ver o Jev responder 'mecanica'. A revisao e de taxonomia, nao de acomodacao: `agentica` roteia para tau_bench, que mede uso de ferramenta em ambiente multi-turno, e nao extensao. Migracao repetida e mecanica por sitio; o custo dela e numero de turnos, que o Score de complexidade ja captura. Manter as duas acepcoes na mesma opcao era o defeito. Complexidade tambem NAO rotulada: o Jev respondeu 0.30, e ele esta certo — cada sitio da migracao e trivial. Eu e que confundi VOLUME com DIFICULDADE ao escrever >= 1.0. A consequencia e um buraco real do desenho, registrado no spec: nenhuma pergunta do roteamento captura volume. Quem deveria responder por ele sao o teto de turnos e o teto de custo, que hoje vem de configuracao e nao da tarefa."
+    },
+    {
+      "nome": "fronteira: parece mecanica, exige entender o algoritmo",
+      "texto": "# Tarefa\n\n`internal/search/bisect.go:31` tem um off-by-one: `for lo < hi` com `hi = len(xs)` devolve indice errado quando o alvo e o ultimo elemento.\n\n```\nfor lo < hi {\n\tmid := (lo + hi) / 2\n\tif xs[mid] < alvo { lo = mid } else { hi = mid }\n}\n```\n\nCorrija sem mudar a assinatura. O teste `TestBisectUltimoElemento` precisa passar, e os 11 testes existentes de `TestBisect*` nao podem quebrar.\n\n```bash\ngo test ./internal/search/\n```",
+      "esperado": {
+        "dimensao_dominante": "raciocinio"
+      },
+      "nota": "Complexidade deliberadamente NAO rotulada. Em 2026-09-21 o Jev respondeu 0.23 e eu havia rotulado >= 1.0; reler o briefing me convenceu de que nao tenho base para sustentar o meu numero, e ajusta-lo para casar com a resposta seria ajustar o gabarito ao aluno. Fica so a dimensao, que e o que decide a rota."
+    }
+  ],
+  "autonomia": [
+    {
+      "nome": "briefing com o codigo novo ja escrito",
+      "texto": "# Tarefa\n\nEm `internal/jev/questions.go`, dentro de `RouteQuestions()`, adicione a entrada `dimensao_dominante` exatamente como no trecho:\n\n```go\n\"dimensao_dominante\": Choice{\n\tInstructions: \"Identifique qual capacidade a tarefa mais exige.\",\n\tCriteria: map[string]string{\n\t\t\"mecanica\":   \"Transformar codigo de forma local e ja determinada.\",\n\t\t\"raciocinio\": \"Entender o problema para decidir a solucao.\",\n\t\t\"agentica\":   \"Operar ferramentas em sequencia ate terminar.\",\n\t},\n},\n```\n\nDepois rode `go test ./internal/jev/` e confirme o verde.",
+      "esperado": {
+        "tarefa_autocontida": true
+      },
+      "medido_2026_09_21": 0.9
+    },
+    {
+      "nome": "briefing que so aponta o sintoma",
+      "texto": "# Tarefa\n\nO login falha de forma intermitente quando o cache de sessao esta quente. Nao se sabe onde esta o defeito.\n\n## Correcao\n\nEncontre a causa e corrija; escreva um teste que a reproduza.",
+      "esperado": {
+        "tarefa_autocontida": false
+      },
+      "medido_2026_09_21": 0.05
+    },
+    {
+      "nome": "FALHA MEDIDA e2e: briefing completo lido como nao autocontido",
+      "texto": "# Tarefa\n\nA funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.\n\nLocalizacao: pkg/mat/soma.go:5\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nfunc Soma(a, b int) int {\n\treturn a - b\n}\n```\n\n## Ordem de trabalho\n\n1. Escreva primeiro o teste que expoe este defeito.\n2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. Cole a saida da falha no relatorio.\n3. So entao corrija.\n4. Rode de novo e confirme o verde.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/ -run TestSoma\ngo test ./...\ngo vet ./...\n```\n\n## Limites\n\n- Nao faca commit e nao faca push.\n- Nao acesse a rede.\n- Trabalhe apenas nesta worktree.\n\n## Relatorio final\n\nAo terminar, responda com: o teste que voce escreveu, a mudanca feita arquivo por arquivo, e a saida literal dos comandos que voce executou, incluindo a do vermelho inicial.\n",
+      "esperado": {
+        "tarefa_autocontida": true
+      },
+      "nota": "Em 2026-09-21 este briefing exato recebeu 0.19. Ele traz o trecho com arquivo:linha, o contrato, a ordem de trabalho e os comandos copiaveis: executar e transcrever.",
+      "medido_2026_09_21": 0.94
+    },
+    {
+      "nome": "autocontida: defeito, contrato e comandos, sem escolha a fazer",
+      "texto": "# Tarefa\n\n`internal/fmtx/moeda.go:22` arredonda para baixo; `docs/adr/0031.md` exige arredondamento bancario.\n\n## Onde esta o defeito\n\n`internal/fmtx/moeda.go:22`:\n```\nreturn math.Floor(v*100) / 100\n```\n\n## Contrato violado\n\n`docs/adr/0031.md`: \"Valores monetarios usam arredondamento bancario (half-to-even) em toda a borda de saida.\"\n\n## Ordem de trabalho\n\n1. Escreva o teste com os casos 2.675 -> 2.68 e 2.665 -> 2.66.\n2. Confirme o vermelho.\n3. Corrija.\n\n```bash\ngo test ./internal/fmtx/ -run TestMoeda\ngo vet ./...\n```",
+      "esperado": {
+        "tarefa_autocontida": true
+      },
+      "medido_2026_09_21": 0.92
+    },
+    {
+      "nome": "nao autocontida: objetivo sem caminho",
+      "texto": "# Tarefa\n\nA listagem de pedidos esta lenta em producao. Deixe mais rapida.\n\n```bash\ngo test ./...\n```",
+      "esperado": {
+        "tarefa_autocontida": false
+      },
+      "medido_2026_09_21": 0.05
+    },
+    {
+      "nome": "nao autocontida: localizada, mas a solucao e escolha em aberto",
+      "texto": "# Tarefa\n\n`internal/api/pedidos.go:88` faz uma consulta por item da lista, e a listagem de 500 pedidos dispara 500 consultas.\n\nResolva o N+1. Escolha entre carregar em lote, adicionar cache por request ou desnormalizar a coluna — o time nao decidiu qual, e a decisao e sua.\n\n```bash\ngo test ./internal/api/\n```",
+      "esperado": {
+        "tarefa_autocontida": false
+      },
+      "medido_2026_09_21": 0.08
+    },
+    {
+      "nome": "fronteira: aponta o defeito mas nao diz a correcao",
+      "texto": "# Tarefa\n\n`internal/sync/fila.go:57` perde mensagens quando dois produtores escrevem no mesmo tick.\n\n## Onde esta o defeito\n\n`internal/sync/fila.go:57`:\n```\nif len(f.buf) < f.cap {\n\tf.buf = append(f.buf, m)\n}\n```\n\nO teste `TestFilaDoisProdutores` precisa passar sem afrouxar os existentes.\n\n```bash\ngo test -race ./internal/sync/\n```",
+      "esperado": {
+        "tarefa_autocontida": false
+      },
+      "nota": "Fronteira deliberada: tem arquivo:linha e comando, mas a correcao (mutex, canal, CAS) nao esta dita.",
+      "medido_2026_09_21": 0.35
+    }
+  ],
+  "watchdog": [
+    {
+      "nome": "turno saudavel",
+      "atual": "turno 3: corrigindo\n  edit(pkg/svc/rota.go) -> [ok] 1 hunk\n",
+      "previos": "turno 2: confirmando o vermelho\n  exec(go test ./pkg/svc/) -> [ok] FAIL: TestRota\n",
+      "esperado": {
+        "sem_progresso": false
+      }
+    },
+    {
+      "nome": "travado repetindo",
+      "atual": "turno 6: tentando de novo\n  exec(go test ./x/) -> [erro] FAIL: cannot find module\n",
+      "previos": "turno 4: tentando de novo\n  exec(go test ./x/) -> [erro] FAIL: cannot find module\nturno 5: tentando de novo\n  exec(go test ./x/) -> [erro] FAIL: cannot find module\n",
+      "esperado": {
+        "sem_progresso": true
+      }
+    }
+  ],
+  "estabilidade": [
+    {
+      "nome": "todos os gates bloqueantes, briefing bom: aprovam sem hesitar",
+      "conjuntos": [
+        "delegabilidade",
+        "briefing"
+      ],
+      "tarefa": "A funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.",
+      "briefing": "# Tarefa\n\nA funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.\n\nLocalizacao: pkg/mat/soma.go:5\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nfunc Soma(a, b int) int {\n\treturn a - b\n}\n```\n\n## Ordem de trabalho\n\n1. Escreva primeiro o teste que expoe este defeito.\n2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. Cole a saida da falha no relatorio.\n3. So entao corrija.\n4. Rode de novo e confirme o verde.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/ -run TestSoma\ngo test ./...\ngo vet ./...\n```\n\n## Limites\n\n- Nao faca commit e nao faca push.\n- Nao acesse a rede.\n- Trabalhe apenas nesta worktree.\n\n## Relatorio final\n\nAo terminar, responda com: o teste que voce escreveu, a mudanca feita arquivo por arquivo, e a saida literal dos comandos que voce executou, incluindo a do vermelho inicial.\n",
+      "repeticoes": 5,
+      "amplitude_maxima": 0.15,
+      "limiares": {
+        "toca_sensivel": 0.5
+      },
+      "esperado": {
+        "aponta_arquivo_linha": true,
+        "cita_fonte_do_contrato": true,
+        "pede_teste_antes_da_correcao": true,
+        "comandos_copiaveis": true,
+        "limites_explicitos": true,
+        "pede_relatorio": true,
+        "criterio_de_pronto": true,
+        "desenho_em_aberto": false,
+        "toca_sensivel": false
+      },
+      "nota": "Os nove gates que REPROVAM trabalho, medidos juntos sobre o briefing que passou no e2e de 2026-09-21. Medido: amplitude maxima 0.070, e a menor margem foi comandos_copiaveis a 0.16 do limiar. Uma requisicao cobre os nove porque perguntas independentes nao se veem."
+    },
+    {
+      "nome": "todos os gates bloqueantes, briefing marginal: reprovam sem hesitar",
+      "conjuntos": [
+        "delegabilidade",
+        "briefing"
+      ],
+      "tarefa": "A funcao Soma em pkg/mat/soma.go:5 nao devolve o que deveria. Corrija.",
+      "briefing": "# Tarefa\n\nA funcao Soma em `pkg/mat/soma.go:5` nao devolve o que deveria.\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nreturn a - b\n```\n\n## Ordem de trabalho\n\nCorrija a funcao e cubra com teste.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/\n```\n\n## Limites\n\n- Trabalhe nesta pasta.\n",
+      "repeticoes": 5,
+      "amplitude_maxima": 0.15,
+      "limiares": {
+        "toca_sensivel": 0.5
+      },
+      "esperado": {
+        "aponta_arquivo_linha": true,
+        "cita_fonte_do_contrato": false,
+        "pede_teste_antes_da_correcao": false,
+        "comandos_copiaveis": false,
+        "limites_explicitos": false,
+        "pede_relatorio": false,
+        "criterio_de_pronto": true,
+        "desenho_em_aberto": false,
+        "toca_sensivel": false
+      },
+      "nota": "O lado que importa: um briefing QUASE bom. Aponta arquivo:linha mas o contrato e vago, tem um comando so, limites frouxos e nao pede relatorio. Medido: as cinco reprovacoes ficam entre 0.030 e 0.240, longe do limiar, com amplitude <= 0.040. Gate que hesita no quase-bom ensina a tentar de novo em vez de corrigir."
+    },
+    {
+      "nome": "criterio_de_pronto: briefing completo supre o criterio que a tarefa omite",
+      "conjuntos": [
+        "delegabilidade"
+      ],
+      "tarefa": "A funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.",
+      "briefing": "# Tarefa\n\nA funcao Soma em pkg/mat/soma.go:5 subtrai em vez de somar, contrariando o contrato documentado na linha 3. Corrija.\n\nLocalizacao: pkg/mat/soma.go:5\n\n## Onde esta o defeito\n\n`pkg/mat/soma.go:5`:\n```\nfunc Soma(a, b int) int {\n\treturn a - b\n}\n```\n\n## Ordem de trabalho\n\n1. Escreva primeiro o teste que expoe este defeito.\n2. Rode o teste e **confirme o vermelho** antes de tocar no codigo de producao. Cole a saida da falha no relatorio.\n3. So entao corrija.\n4. Rode de novo e confirme o verde.\n\n## Comandos\n\n```bash\ngo test ./pkg/mat/ -run TestSoma\ngo test ./...\ngo vet ./...\n```\n\n## Limites\n\n- Nao faca commit e nao faca push.\n- Nao acesse a rede.\n- Trabalhe apenas nesta worktree.\n\n## Relatorio final\n\nAo terminar, responda com: o teste que voce escreveu, a mudanca feita arquivo por arquivo, e a saida literal dos comandos que voce executou, incluindo a do vermelho inicial.\n",
+      "repeticoes": 6,
+      "amplitude_maxima": 0.15,
+      "esperado": {
+        "criterio_de_pronto": true
+      },
+      "nota": "ACHADO de 2026-09-21, o unico caso de oscilacao real encontrado. Medi a pergunta isolada, SEM briefing no estado: 0.130 a 0.160, estavel, e conclui que minha alegacao de oscilacao estava errada. Com o estado REAL do gate ela devolveu 0.540 a 0.610 — em cima do limiar, lado errado em 2 de 6. A causa era minha: a pergunta falava de tarefa.texto enquanto via tambem o briefing, e os dois discordavam. Reescrita para julgar os dois como um artefato so. Depois da correcao: 0.960 cravado."
+    },
+    {
+      "nome": "criterio_de_pronto reprova quando nem a tarefa nem o briefing dizem",
+      "conjuntos": [
+        "delegabilidade"
+      ],
+      "tarefa": "A listagem de pedidos esta lenta em producao. Deixe mais rapida.",
+      "briefing": "# Tarefa\n\nA listagem de pedidos esta lenta em producao. Deixe mais rapida.\n\n## Limites\n\n- Nao faca commit e nao faca push.\n",
+      "repeticoes": 5,
+      "amplitude_maxima": 0.2,
+      "esperado": {
+        "criterio_de_pronto": false
+      },
+      "nota": "Negativa de verdade: nenhum dos dois textos diz como saber que terminou."
+    }
+  ],
+  "_calibragem": {
+    "tarefa_autocontida": {
+      "as_of": "2026-09-21",
+      "metodo": "mediana de 3 execucoes por fixture, estado com briefing.texto",
+      "classe_true": [
+        0.9,
+        0.92,
+        0.94
+      ],
+      "classe_false": [
+        0.05,
+        0.05,
+        0.08,
+        0.35
+      ],
+      "vao": 0.55,
+      "limiar_escolhido": 0.625,
+      "justificativa": "Ponto medio do vao. Se houvesse que descentrar seria para cima: tratar tarefa ambigua como fechada custa o run inteiro, tratar fechada como ambigua custa centavos."
+    },
+    "piso_tau_minimo": {
+      "as_of": "2026-09-21",
+      "valor": 0.5,
+      "calibrado_por_fixture": false,
+      "por_que_nao": "Nao e corte sobre resposta do Jev, e percentil dentro do roster. Nao existe rotulo dizendo qual percentil de tau basta. Calibrar exigiria rodar tarefas ambiguas com modelos de tau diferente e medir onde a taxa de sucesso cai — experimento tentado em 2026-09-21 e nao concluido.",
+      "o_que_sustenta": "O efeito sobre o roster real, fixado por TestPisoExcluiOsFracosEmAgenticoDoRosterReal: exclui exatamente os dois modelos de pior agentic_index (29.0 e 41.0) e nenhum outro."
+    }
+  }
+}

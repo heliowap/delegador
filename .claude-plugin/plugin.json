@@ -1,0 +1,6 @@
+{
+  "name": "delegador",
+  "version": "0.2.0",
+  "description": "Delega uma correcao de codigo a um modelo escolhido pela tarefa, num laco proprio com permissao em codigo, verificacao em codigo e cascata por falha provada.",
+  "author": { "name": "Helio Pinheiro" }
+}
