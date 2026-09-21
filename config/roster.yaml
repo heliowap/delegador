@@ -15,9 +15,16 @@
 #              alheios que podem não ter esse tratamento.
 #   humano:    você preenche. O sistema nunca escreve aqui.
 #
-# `custo_usd_por_mtok` é o SEU custo de servir, não o preço do OpenRouter.
-# Está como `null` de propósito: o roteador trata null como "não elegível
-# para decisão por custo" em vez de adivinhar zero.
+# `custo_usd_por_mtok` e `custo_saida_usd_por_mtok` são o custo de servir.
+# Preenchidos em 2026-09-21 com o **preço de lista medido em `devin models
+# list` na conta do autor** — não com um custo de serviço negociado, que
+# seria menor. Se o seu custo real diferir, sobrescreva: estes números só
+# alimentam o ledger e a elegibilidade, e um valor errado produz uma conta
+# errada, não uma escolha errada.
+#
+# São dois campos porque saída custa de 3 a 5 vezes a entrada, e um número
+# único aplicado aos dois lados subestimava a conta na mesma proporção. Um
+# ledger que erra por 3x não é auditável.
 
 versao: 1
 as_of_benchmark: "2026-09-20T00:03:27Z"
@@ -44,7 +51,8 @@ modelos:
       gpqa_diamond: 0.861
       preco_openrouter_usd_por_mtok: {entrada: 0.15, saida: 0.50}
     humano:
-      custo_usd_por_mtok: null
+      custo_usd_por_mtok: 0.15
+      custo_saida_usd_por_mtok: 0.5
       habilitado: true
     eval:
       # Confronto direto contra devin/swe-2 nas tarefas deste plano.
@@ -103,7 +111,8 @@ modelos:
       gpqa_diamond: 0.855
       preco_openrouter_usd_por_mtok: {entrada: 0.11, saida: 0.33}
     humano:
-      custo_usd_por_mtok: null
+      custo_usd_por_mtok: 0.22
+      custo_saida_usd_por_mtok: 0.66
       habilitado: true
     nota: >
       Segunda opção barata. Números do benchmark são da geração anterior
@@ -130,7 +139,8 @@ modelos:
       gpqa_diamond: 0.928
       preco_openrouter_usd_por_mtok: {entrada: 1.35, saida: 6.75}
     humano:
-      custo_usd_por_mtok: null
+      custo_usd_por_mtok: 1.5
+      custo_saida_usd_por_mtok: 7.5
       habilitado: true
     nota: >
       O mais rápido do roster (1.4s) e o melhor gpqa (0.928), mas o pior
@@ -156,7 +166,8 @@ modelos:
       gpqa_diamond: 0.901
       preco_openrouter_usd_por_mtok: {entrada: 5.00, saida: 25.00}
     humano:
-      custo_usd_por_mtok: null
+      custo_usd_por_mtok: 10.0
+      custo_saida_usd_por_mtok: 50.0
       habilitado: true
     nota: >
       Topo de coding_index entre os 149 modelos medidos (81.6) e, pelos
@@ -185,7 +196,8 @@ modelos:
       gpqa_diamond: 0.872
       preco_openrouter_usd_por_mtok: {entrada: 5.50, saida: 27.50}
     humano:
-      custo_usd_por_mtok: null
+      custo_usd_por_mtok: 5.0
+      custo_saida_usd_por_mtok: 25.0
       habilitado: true
     nota: >
       Melhor tau-bench do roster, mas a diferença para o glm (0.792 vs 0.758)
@@ -204,7 +216,8 @@ modelos:
       latencia_s: 4.7
     benchmark: null
     humano:
-      custo_usd_por_mtok: null
+      custo_usd_por_mtok: 0.0   # promoção de setembro/2026; quando acabar, este número muda
+      custo_saida_usd_por_mtok: 0.0
       habilitado: true
     fornecedor:
       # cognition.com/blog/swe-2. Método declarado: resultado público quando
