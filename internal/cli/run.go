@@ -281,6 +281,8 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		maxTurns = fs.Int("max-turns", runMaxTurns, "teto de turnos do laco por tentativa")
 		maxEsc   = fs.Int("max-escaladas", -1,
 			"teto de escaladas da cascata; 0 desliga, -1 usa o padrao")
+		ociosos = fs.Int("turnos-ociosos", 0,
+			"turnos sem escrita que caracterizam ociosidade; 0 usa o do job")
 	)
 	if err := fs.Parse(args); err != nil {
 		return ExitUsage
@@ -476,6 +478,16 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		}
 		if j.IdleTurns > 0 {
 			preCfg.IdleTurns = j.IdleTurns
+		}
+		// A tolerancia a ociosidade foi calibrada em worktree de tarefa
+		// unica. Num repositorio grande e desconhecido, ler dez arquivos
+		// antes da primeira escrita e preambulo normal, e nao ociosidade:
+		// medido em 2026-09-21, o piso de 10 vetou seis de nove execucoes
+		// de modelos baratos sobre o expr-lang/expr, quase todas por
+		// `sem_escrita`. Quem opera precisa poder afrouxar isso sem mexer
+		// no volume, que decide outra coisa.
+		if *ociosos > 0 {
+			preCfg.IdleTurns = *ociosos
 		}
 		preCfg.Marcar = marcas.Registrar
 		pre := agent.NewPrecondition(preCfg,

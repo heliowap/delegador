@@ -89,6 +89,13 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "plan: --task e --worktree sao obrigatorios")
 		return ExitUsage
 	}
+	// Antes de qualquer coisa cara: o briefing nao pode mandar rodar o que a
+	// execucao vai recusar. Falhar aqui custa nada; falhar na execucao custa
+	// o run e ainda registra a culpa no modelo.
+	if err := comandosExecutaveis(*worktree, nonEmpty(*testCmd, *suiteCmd, *lintCmd)); err != nil {
+		fmt.Fprintf(stderr, "plan: %v\n", err)
+		return ExitUsage
+	}
 
 	key := os.Getenv("TYPESAFE_API_KEY")
 	if key == "" {
