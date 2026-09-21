@@ -336,6 +336,41 @@ modelos:
 
   - id: devin/swe-2
     papel: barato          # era `forte`; corrigido por evidência, ver nota
+    # Porta dos sem-benchmark. O corte de percentil mede JULGAMENTO, e este
+    # modelo nao tem benchmark publico — e proprietario e nao esta na lista
+    # de terceiro. Ficava fora da rota por falta de DADO, nao de capacidade:
+    # na varredura de 252 combinacoes de 2026-09-21 ele venceu ZERO, porque
+    # o ramo de fallback que o abrigava e inalcancavel enquanto houver
+    # qualquer modelo com benchmark elegivel.
+    #
+    # OS DOIS NUMEROS SAO EXPERIMENTO, nao calibragem. O que sustenta cada um:
+    #
+    # autocontencao >= 0.75 — as fixtures rotulam "fechada" em 0.900-0.940 e
+    # "aberta" em 0.050-0.350, mas essas vieram de tarefas sinteticas com
+    # 72-91% de codigo literal. As SEIS issues reais do eval de 2026-09-21
+    # mediram 0.68, 0.69, 0.75, 0.76, 0.78 e 0.84: briefing derivado de issue
+    # de usuario simplesmente nao fecha tanto quanto spec escrita a mao. Com
+    # 0.85 a porta nao abriria para nenhuma das seis. 0.75 admite quatro.
+    #
+    # complexidade <= 0.50 — a primeira versao desta porta tinha so a chave
+    # de autocontencao, e medindo descobriu-se que ela entregava TUDO ao
+    # sem-benchmark: a preferencia de conta domina o desempate e ele nao tem
+    # numero de qualidade com que ser comparado. Autocontencao diz que as
+    # decisoes estao fechadas; nao diz que o que sobrou e facil. O registro
+    # bom deste modelo e de tarefa fechada E mecanica — oito tarefas do plano
+    # em 2026-09-20, com fidelidade e sem alterar teste nenhum.
+    #
+    # Efeito medido sobre a distribuicao real de autocontencao das seis
+    # issues: a porta leva ~34% das decisoes para a conta gratuita, TODAS do
+    # lado facil. A fatia em claude-max nao se move — ela e inteira do lado
+    # dificil, e so sai de la com um modelo forte noutra conta.
+    #
+    # A rede e a cascata: desde 2026-09-21 ela escala tambem por estagnacao,
+    # entao errar aqui custa uma escalada, nao o run. E ate 2026-09-30 o
+    # erro nao custa cota nenhuma — e por isso a janela para medir os dois
+    # numeros e agora.
+    admite_sem_benchmark: 0.75
+    admite_ate_percentil: 0.50
     conta: devin-pro-promo
     permaslug: null
     mapeamento: ausente

@@ -239,6 +239,39 @@ func EscolherCom(ms []roster.Model, d Dimensao, percentil float64, opts Opcoes) 
 		}
 	}
 
+	// Porta dos sem-benchmark: o corte de percentil mede JULGAMENTO, e um
+	// briefing que fecha as decisoes nao pede julgamento — pede execucao
+	// fiel. Modelo sem numero de terceiro nao passa pelo corte por falta de
+	// DADO, nao por falta de capacidade, e ficava fora da rota por um
+	// detalhe de disponibilidade de benchmark.
+	//
+	// Quem declara `admite_sem_benchmark` no roster esta dizendo: acima
+	// desta autocontencao, confio neste modelo para transcrever. A cascata
+	// e a rede — desde 2026-09-21 ela escala por estagnacao tambem, entao
+	// errar aqui custa uma escalada, nao o run.
+	//
+	// Autocontida nao informada (zero) mantem a porta fechada: a admissao
+	// depende de uma medida que o gate faz, e sem ela nao ha o que julgar.
+	// A porta tem DUAS chaves, e a segunda veio de medir a primeira sozinha:
+	// admitir so por autocontencao entregava tudo ao sem-benchmark, porque a
+	// preferencia de conta domina o desempate e ele nao tem numero de
+	// qualidade com que ser comparado. Autocontencao diz que as decisoes
+	// estao fechadas; nao diz que o que sobrou e facil.
+	if opts.Autocontida > 0 {
+		for _, m := range unmeasured {
+			if m.AdmiteSemBenchmark <= 0 || opts.Autocontida < m.AdmiteSemBenchmark {
+				continue
+			}
+			if m.AdmiteAtePercentil > 0 && percentil > m.AdmiteAtePercentil {
+				continue
+			}
+			passing = append(passing, m)
+			motivoAmbiguidade = juntaMotivo(motivoAmbiguidade, fmt.Sprintf(
+				"%s entrou sem benchmark: autocontida %.2f >= %.2f e complexidade %.2f <= %.2f, limiares do roster",
+				m.ID, opts.Autocontida, m.AdmiteSemBenchmark, percentil, m.AdmiteAtePercentil))
+		}
+	}
+
 	// Intersecao vazia: o piso e pre-requisito, entao vale ele sozinho.
 	if len(passing) == 0 && pisoTau != nil {
 		for _, m := range measured {
@@ -423,6 +456,11 @@ func indexOf(m roster.Model, d Dimensao) float64 {
 // Sem preco do benchmark nao da para desfazer o custo: o modelo vai para o
 // fim da fila em vez de ganhar por um zero.
 func trabalhoPorTarefa(m roster.Model) float64 {
+	if m.Benchmark == nil {
+		// Sem benchmark nao ha trabalho estimado. Vai para o fim da fila do
+		// desempate — a conta ja o colocou onde ele deve estar.
+		return math.Inf(1)
+	}
 	t := m.Benchmark.TokensPorTarefa()
 	if t <= 0 {
 		return math.Inf(1)

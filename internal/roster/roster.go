@@ -33,6 +33,23 @@ type Model struct {
 	// `contas:` do arquivo. Zero quando o modelo nao declarou nenhuma —
 	// e conta omitida nao vira preferida, ver Conta.Ordem.
 	Conta Conta
+	// AdmiteSemBenchmark abre uma porta para modelo sem benchmark de
+	// terceiro: ele entra na disputa quando tarefa_autocontida alcanca
+	// este valor. Zero — o padrao — mantem a porta fechada.
+	//
+	// Existe porque o corte de percentil mede JULGAMENTO, e briefing que
+	// fecha as decisoes nao pede julgamento: pede execucao fiel. Modelo
+	// proprietario sem benchmark publico — swe-2 e o caso — fica hoje fora
+	// da rota por falta de numero de terceiro, nao por falta de
+	// capacidade, e essa porta e o lugar de declarar isso com um limiar em
+	// vez de inventar um benchmark.
+	AdmiteSemBenchmark float64
+	// AdmiteAtePercentil e o teto de COMPLEXIDADE da mesma porta. Sem ele,
+	// admitir por autocontencao entregava tudo ao sem-benchmark: a
+	// preferencia de conta domina o desempate e ele nao tem numero de
+	// qualidade com que ser comparado. Autocontencao diz que as decisoes
+	// estao fechadas; nao diz que o que sobrou e facil.
+	AdmiteAtePercentil float64
 }
 
 // Probe é o que a sondagem mediu numa chamada mínima ao modelo. Perde
@@ -255,6 +272,18 @@ func parse(raw []byte) ([]Model, error) {
 				atual.Mapeamento = valorEscalar(valor)
 			case "conta":
 				refConta[len(ms)-1] = valorEscalar(valor)
+			case "admite_sem_benchmark":
+				f, err := strconv.ParseFloat(valor, 64)
+				if err != nil {
+					return nil, errf("admite_sem_benchmark: %v", err)
+				}
+				atual.AdmiteSemBenchmark = f
+			case "admite_ate_percentil":
+				f, err := strconv.ParseFloat(valor, 64)
+				if err != nil {
+					return nil, errf("admite_ate_percentil: %v", err)
+				}
+				atual.AdmiteAtePercentil = f
 			case "sondado":
 				sec = secaoSondado
 			case "benchmark":
