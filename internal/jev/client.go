@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -65,10 +67,15 @@ func New(o Options) *Client {
 		c.http = &http.Client{Timeout: 60 * time.Second}
 	}
 	if c.maxRetries == 0 {
-		c.maxRetries = 3
+		// Medido em 2026-09-21: o Jev devolveu 503 intermitente em janelas de
+		// dezenas de segundos, e 3 tentativas com base de 500ms cobriam 3,5s
+		// — curto demais. Cinco tentativas com base de 1s cobrem ~31s e
+		// atravessam a janela. Um plan faz uma chamada por item de
+		// evidencia: um unico 503 derrubava o plan inteiro.
+		c.maxRetries = 5
 	}
 	if c.backoffBase == 0 {
-		c.backoffBase = 500 * time.Millisecond
+		c.backoffBase = time.Second
 	}
 	return c
 }
@@ -98,9 +105,18 @@ func (c *Client) Ask(ctx context.Context, state any, qs map[string]Question) (Re
 	}
 
 	var lastErr error
+	var retryAfter time.Duration
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
 			d := c.backoffBase * time.Duration(1<<(attempt-1))
+			// Jitter de ate 25%: varias chamadas do mesmo plan falham juntas,
+			// e sem jitter elas voltam juntas e derrubam de novo.
+			if d > 0 {
+				d += time.Duration(rand.Int63n(int64(d)/4 + 1))
+			}
+			if ra := retryAfter; ra > 0 && ra > d {
+				d = ra // o servidor sabe melhor que o nosso backoff
+			}
 			select {
 			case <-ctx.Done():
 				return Result{}, ctx.Err()
@@ -135,6 +151,12 @@ func (c *Client) Ask(ctx context.Context, state any, qs map[string]Question) (Re
 			return Result{Answers: out.Answers, Usage: out.Usage}, nil
 
 		case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
+			retryAfter = 0
+			if v := resp.Header.Get("Retry-After"); v != "" {
+				if secs, err := strconv.Atoi(v); err == nil && secs > 0 && secs <= 120 {
+					retryAfter = time.Duration(secs) * time.Second
+				}
+			}
 			// transitorio: tenta de novo
 			lastErr = fmt.Errorf("jev: status %d", resp.StatusCode)
 
