@@ -455,6 +455,9 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		if j.CostCapUSD > 0 {
 			preCfg.CostCapUSD = j.CostCapUSD
 		}
+		if j.IdleTurns > 0 {
+			preCfg.IdleTurns = j.IdleTurns
+		}
 		pre := agent.NewPrecondition(preCfg,
 			askerContado{jevClient, jevLedger, "precondicao", stderr},
 			func() float64 {

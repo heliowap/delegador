@@ -12,18 +12,27 @@ import "math"
 type Orcamento struct {
 	Turnos  int
 	TetoUSD float64
+	// TurnosOciosos e quantos turnos seguidos sem escrita sao tolerados antes
+	// do veto. Escala com o volume pelo mesmo motivo que os outros dois:
+	// autorar dois arquivos a partir de um contrato exige ler bastante antes
+	// da primeira escrita, e matar no turno 10 de 60 e falso positivo.
+	TurnosOciosos int
 }
 
 // OrcamentoBase e o orcamento de fabrica, ancorado no volume nivel 1.
 // agent.DefaultPreConfig traz o mesmo teto de custo como fallback de quem
 // roda sem plan; os dois numeros devem andar juntos.
-func OrcamentoBase() Orcamento { return Orcamento{Turnos: 30, TetoUSD: 5.00} }
+func OrcamentoBase() Orcamento {
+	return Orcamento{Turnos: 30, TetoUSD: 5.00, TurnosOciosos: 10}
+}
 
 // Limites protegem contra resposta degenerada do modelo: nem 0 turnos, nem
 // um laco que roda ate a conta acabar.
 const (
 	turnosMin  = 6
 	turnosMax  = 200
+	ociososMin = 4
+	ociososMax = 60
 	tetoUSDMin = 0.10
 	tetoUSDMax = 50.00
 )
@@ -41,9 +50,11 @@ func OrcamentoPara(volume float64, base Orcamento) Orcamento {
 	turnos := int(math.Round(float64(base.Turnos) * fator))
 	teto := base.TetoUSD * fator
 
+	ociosos := int(math.Round(float64(base.TurnosOciosos) * fator))
 	return Orcamento{
-		Turnos:  clampInt(turnos, turnosMin, turnosMax),
-		TetoUSD: clampFloat(teto, tetoUSDMin, tetoUSDMax),
+		Turnos:        clampInt(turnos, turnosMin, turnosMax),
+		TetoUSD:       clampFloat(teto, tetoUSDMin, tetoUSDMax),
+		TurnosOciosos: clampInt(ociosos, ociososMin, ociososMax),
 	}
 }
 

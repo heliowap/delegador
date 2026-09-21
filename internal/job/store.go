@@ -64,6 +64,7 @@ type Job struct {
 	// significa "não decidido": o run cai no padrão de fábrica.
 	MaxTurns   int     `json:"max_turns"`
 	CostCapUSD float64 `json:"cost_cap_usd"`
+	IdleTurns  int     `json:"idle_turns"`
 
 	// O registro da rota: a cascata re-roteia a partir de Percentil sem
 	// repreguntar ao Jev, e o relatorio explica a escolha sem refazer a conta.

@@ -225,6 +225,7 @@ func runPlan(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		// total, e cravar 30 turnos para toda tarefa errava os dois extremos.
 		orc := route.OrcamentoPara(cls.Volume, route.OrcamentoBase())
 		j.MaxTurns, j.CostCapUSD = orc.Turnos, orc.TetoUSD
+		j.IdleTurns = orc.TurnosOciosos
 		volume = cls.Volume
 		if err := j.Save(); err != nil {
 			fmt.Fprintf(stderr, "plan: %v\n", err)
