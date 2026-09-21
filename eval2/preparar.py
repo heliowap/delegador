@@ -51,9 +51,14 @@ def main():
 
     # 2. evidencia: o contrato e a especificacao, nunca a implementacao
     ev = [
-        {"kind": "fonte", "ref": f"{plano_path}#task-{n}",
+        # ref NAO navegavel de proposito: o plano tem 7400 linhas e esta dentro
+        # da worktree. Medido em 2026-09-21 — apontar para ele fez o modelo
+        # gastar 5 dos 8 turnos brigando com leitura truncada e janelas de
+        # offset, ate o watchdog vetar por sem_progresso. O contrato ja vai
+        # inline logo abaixo; o ref so abria uma porta para o modelo se afogar.
+        {"kind": "fonte", "ref": f"plano-v1 (tarefa {n})",
          "text": "Contrato desta tarefa, do plano aprovado:\n\n" + interfaces(body)},
-        {"kind": "trecho", "ref": f"{testes[0][0]}:1",
+        {"kind": "trecho", "ref": f"{testes[0][0]}:1",  # este SIM e util navegar
          "text": "Os testes ja estao escritos no disco e sao o criterio de aceite. "
                  "Nao os altere.\n\n" + testes[0][1][:3000]},
         {"kind": "comando", "text": "go test ./... && go vet ./..."},
@@ -64,6 +69,8 @@ def main():
     tarefa = (
         f"Implemente a tarefa {n} do plano deste repositorio. Os arquivos de TESTE ja "
         f"estao no disco e definem o comportamento exigido: {', '.join(c for c, _ in testes)}. "
+        f"NAO leia o arquivo do plano em docs/: ele tem milhares de linhas e tudo "
+        f"que voce precisa dele ja esta neste briefing. "
         f"Voce precisa escrever os arquivos de implementacao que fazem esses testes "
         f"passarem: {', '.join(alvos)}. Respeite exatamente as assinaturas do contrato. "
         f"NAO altere nenhum arquivo terminado em _test.go — eles sao o criterio de aceite, "
