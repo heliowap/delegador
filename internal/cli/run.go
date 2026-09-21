@@ -438,7 +438,11 @@ func runRun(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		// desta tentativa, recomputado a cada pre-condicao — vetar no
 		// meio do laco nao pode esperar o fim dele.
 		var emCurso float64
-		pre := agent.NewPrecondition(agent.DefaultPreConfig(),
+		// O escopo declarado do job alimenta o sinal fora_do_escopo: Allow
+		// ja nega a escrita, este sinal acusa o modelo insistindo nela.
+		preCfg := agent.DefaultPreConfig()
+		preCfg.Policy = policy
+		pre := agent.NewPrecondition(preCfg,
 			askerContado{jevClient, jevLedger, "precondicao", stderr},
 			func() float64 {
 				total, _ := execLedger.Total()

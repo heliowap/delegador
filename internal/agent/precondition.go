@@ -37,6 +37,15 @@ type PreConfig struct {
 	ConsecutiveWindows int     // janelas seguidas com sem_progresso alto
 	NoProgress         float64 // corte do noul sem_progresso
 	CostCapUSD         float64 // custo acumulado máximo por job
+
+	// Policy é o escopo declarado do job. Serve ao sinal fora_do_escopo:
+	// tools.Allow já nega a escrita, este sinal detecta o modelo insistindo.
+	// Sem WritePrefixes declarados o sinal fica desligado — ausência de
+	// política não inventa política.
+	Policy tools.Policy
+	// OutOfScopeAttempts é quantas tentativas de escrita fora do escopo
+	// caracterizam insistência. Uma é engano; a segunda é sintoma.
+	OutOfScopeAttempts int
 }
 
 // DefaultPreConfig traz os limiares de fábrica: repetição veta na terceira
@@ -50,6 +59,7 @@ func DefaultPreConfig() PreConfig {
 		ConsecutiveWindows: 2,
 		NoProgress:         0.8,
 		CostCapUSD:         5.00,
+		OutOfScopeAttempts: 2,
 	}
 }
 
@@ -74,6 +84,9 @@ func NewPrecondition(cfg PreConfig, a Asker, costSoFar func() float64) Precondit
 			}
 		}
 		if v := repeatedCall(turns, cfg.RepeatThreshold); v != nil {
+			return v
+		}
+		if v := outOfScope(turns, cfg.Policy, cfg.OutOfScopeAttempts); v != nil {
 			return v
 		}
 		if v := noWrite(turns, cfg.IdleTurns); v != nil {
@@ -307,4 +320,37 @@ func windowState(turns []Turn, qs map[string]jev.Question) (any, error) {
 		}
 	}
 	return w, nil
+}
+
+// outOfScope conta tentativas de ESCRITA que a política negaria e veta quando
+// o modelo insiste. Reusa tools.Allow de propósito: duplicar a regra de
+// escopo aqui criaria duas verdades sobre o que é permitido.
+func outOfScope(turns []Turn, p tools.Policy, threshold int) *Veto {
+	if len(p.WritePrefixes) == 0 || threshold <= 0 {
+		return nil
+	}
+	var tentativas []string
+	for _, t := range turns {
+		for _, call := range t.Message.ToolCalls {
+			if !isWrite(call.Name) {
+				continue
+			}
+			if d := tools.Allow(call, p); !d.Allowed {
+				tentativas = append(tentativas, call.Args["path"])
+			}
+		}
+	}
+	if len(tentativas) < threshold {
+		return nil
+	}
+	return &Veto{
+		Signal:      "fora_do_escopo",
+		Probability: 1,
+		Excerpt: fmt.Sprintf("%d tentativas de escrita fora de %v: %s",
+			len(tentativas), p.WritePrefixes, strings.Join(tentativas, ", ")),
+	}
+}
+
+func isWrite(name string) bool {
+	return name == "write_file" || name == "edit_file"
 }
