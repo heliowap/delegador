@@ -137,6 +137,19 @@ modelos:
     nota: >
       Mesmo peso do cpa-fw-glm-5.3-flash, na conta que aperta menos. Primeira
       escolha entre os canais deste modelo enquanto o plano Go tiver folga.
+    # MEDIDO no piloto de 2026-09-21 (docs/evals/2026-09-21-piloto-de-capacidade.md):
+    # 0 de 3 tarefas. Uma nao conta — o canal caiu com 400 de upstream — e
+    # duas sao falha real: na facil parou no meio da exploracao e devolveu
+    # texto em vez de continuar; na dificil, 25 turnos sem escrever nada.
+    #
+    # E o resultado que mais importa, porque este modelo vence 132 de 252
+    # combinacoes da rota. A rota ainda o prefere, e os numeros que ela usa
+    # vem do benchmark de terceiro; enquanto os nossos nao entrarem na
+    # decisao, essa contradicao fica de pe e registrada.
+    #
+    # E o canal: o cpa-ocgo falhou DUAS vezes hoje com "Upstream request
+    # failed", enquanto cpa-fw e cpa-or responderam 12 de 12 na mesma
+    # sondagem. A preferencia por conta folgada trouxe instabilidade junto.
   - id: cpa-ocgo-deepseek-v4.1-flash
     papel: barato
     conta: opencode-go
