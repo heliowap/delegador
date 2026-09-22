@@ -91,3 +91,20 @@ func TestOciosidadeRespeitaLimites(t *testing.T) {
 		t.Errorf("ociosos = %d, maximo %d", got.TurnosOciosos, ociososMax)
 	}
 }
+
+// O piso de ociosidade e o numero que mais errou no projeto ate agora.
+// Medido em 2026-09-21: com 10, catorze de dezessete celulas do piloto
+// morreram por `sem_escrita`, quase todas exatamente no turno 10 ou 13 — e
+// as mesmas celulas viraram verdes com 25. O laco estava matando modelos
+// capazes a dez turnos do fim.
+func TestPisoDeOciosidadeSustentaOPreambuloDeUmRepoGrande(t *testing.T) {
+	// A menor tolerancia que o sistema emite, em qualquer volume, precisa
+	// sustentar um preambulo de leitura de repositorio desconhecido.
+	const preambuloObservado = 20
+	for _, v := range []float64{-1, 0, 0.5, 1, 2, 4} {
+		if got := OrcamentoPara(v, base()).TurnosOciosos; got < preambuloObservado {
+			t.Errorf("volume %.2f -> %d ociosos; o piloto mediu ate %d turnos ate a "+
+				"primeira escrita num repositorio real", v, got, preambuloObservado)
+		}
+	}
+}

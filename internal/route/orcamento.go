@@ -29,9 +29,20 @@ func OrcamentoBase() Orcamento {
 // Limites protegem contra resposta degenerada do modelo: nem 0 turnos, nem
 // um laco que roda ate a conta acabar.
 const (
-	turnosMin  = 6
-	turnosMax  = 200
-	ociososMin = 10
+	turnosMin = 6
+	turnosMax = 200
+	// MEDIDO em 2026-09-21, no piloto de capacidade: com o piso em 10, 14 de
+	// 17 celulas morreram por `sem_escrita`, quase todas exatamente no turno
+	// 10 ou 13. Com 25, as mesmas celulas viraram verdes — o swe-2 na tarefa
+	// media foi de veto aos 10 turnos a verde aos 20. Num repositorio grande
+	// e desconhecido, ler dez arquivos antes da primeira escrita e preambulo
+	// normal; o numero antigo foi calibrado em worktree de tarefa unica.
+	//
+	// 20 fica entre o que os modelos precisaram (ate ~20 turnos ate a
+	// primeira escrita) e o que ainda e desperdicio. Os dois erros custam
+	// coisas diferentes: um veto falso joga fora o run inteiro, e alguns
+	// turnos ociosos a mais custam alguns turnos.
+	ociososMin = 20
 	ociososMax = 60
 	tetoUSDMin = 0.10
 	tetoUSDMax = 50.00
