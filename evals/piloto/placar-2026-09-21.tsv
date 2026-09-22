@@ -1,7 +1,6 @@
 modelo	tarefa	veredito	parada	turnos	tok_in	tok_out	seg	alterou_teste	arq_extra	job
 swe2	facil	VERDE	final	9	108527	7159	154	0	0	job-8bedd98ce9
 swe2	dificil	VERMELHO	final	38	2414309	15203	1320	0	2	job-52ec0539d5
-glm	facil	VERMELHO	final	8	66910	4864	434	0	0	job-71f94dbec7
 deepseek	facil	VERDE	final	15	437879	14161	108	0	0	job-a513284ba3
 deepseek	dificil	VERMELHO	sem_escrita	25	1067502	13957	124	0	0	job-590fe98810
 muse	facil	VERDE	final	15	334930	26134	308	0	0	job-65c29cf312
@@ -11,9 +10,13 @@ gemini38	dificil	VERMELHO	sem_escrita	25	1100262	30192	139	0	0	job-0410528b04
 opus46	facil	VERDE	final	12	182598	3112	98	0	0	job-7926c74d7a
 opus46	dificil	VERDE	final	21	1082000	6315	174	0	1	job-f453f3ba57
 swe2	medio	VERDE	final	19	629441	6218	172	0	0	job-0024c1691d
-glm	medio	VERMELHO	final	0	0	0	12	0	0	job-f26db0c352
 deepseek	medio	VERDE	final	20	694328	7266	93	0	0	job-e118ff65bf
 muse	medio	VERDE	final	20	855113	27486	222	0	0	job-daa1dc6ccb
 gemini38	medio	VERDE	final	20	745010	16858	110	0	0	job-fb20997fa8
 opus46	medio	VERDE	final	14	501957	3205	119	0	0	job-fbf1988ce2
-glm	dificil	VERMELHO	sem_escrita	25	1126548	11236	643	0	0	job-53de8ca278
+glm	facil	VERMELHO	final	15	299070	9267	120	0	0	job-ed03fa7ec4
+glm	medio	VERMELHO	final	20	550252	19491	203	0	0	job-3e6c69c92f
+glm	dificil	VERMELHO	sem_escrita	25	1001631	23725	388	0	0	job-2abedd8408
+opus46cm	facil	VERDE	final	7	73728	2033	91	0	0	job-0fb751c5f1
+opus46cm	medio	VERDE	final	9	224004	2836	106	0	0	job-09665eaf68
+opus46cm	dificil	VERDE	final	24	1077061	7054	214	0	0	job-d42fef6fa2
