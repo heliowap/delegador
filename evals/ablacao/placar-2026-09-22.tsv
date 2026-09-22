@@ -1,0 +1,7 @@
+braco	tarefa	veredito	detalhe	turnos	tok_in	tok_out	seg	alterou_teste	arq_extra
+nu	facil	VERDE	final	10	199328	8829	128	0	0
+plugin	facil	VERDE	final	18	393412	14153	195	0	0
+nu	medio	VERDE	final	16	670528	11481	167	0	1
+plugin	medio	VERDE	final	17	701466	12150	184	0	0
+nu	dificil	VERDE	final	34	2477085	30928	507	0	0
+plugin	dificil	VERDE	final	34	2525092	35960	548	0	0
