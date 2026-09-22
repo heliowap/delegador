@@ -33,7 +33,16 @@ func escreveVeracidade(w io.Writer, vs []veracidade.Veredito) {
 		}
 		return
 	}
-	fmt.Fprintln(w, "relato:   o relatorio do executor DIVERGE do que o trace registra")
+	// Incerto nao e acusacao — o proprio pacote o define como "nao acusa nem
+	// absolve". Medido em 2026-09-22: duas conferencias a 0,77 e 0,78, logo
+	// abaixo do corte de 0,8, saiam sob o cabecalho "DIVERGE". O relatorio
+	// acusava o executor de uma divergencia que ninguem afirmou.
+	if suspeitos == 0 {
+		fmt.Fprintf(w, "relato:   %d de %d comandos conferem; %d inconclusivo(s)\n",
+			ok, len(vs), incertos)
+	} else {
+		fmt.Fprintln(w, "relato:   o relatorio do executor DIVERGE do que o trace registra")
+	}
 	for _, v := range vs {
 		switch v.Estado {
 		case veracidade.SemExecucao:

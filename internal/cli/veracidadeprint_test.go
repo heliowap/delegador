@@ -63,3 +63,24 @@ func TestSoOmissaoNaoAcusa(t *testing.T) {
 		t.Errorf("omissao virou acusacao: %q", b.String())
 	}
 }
+
+// Incerto nao e acusacao. Medido em 2026-09-22: duas conferencias a 0,77 e
+// 0,78 — logo abaixo do corte — saiam sob o cabecalho "DIVERGE", e o
+// relatorio acusava o executor de algo que ninguem afirmou.
+func TestSoInconclusivoNaoAcusa(t *testing.T) {
+	var b bytes.Buffer
+	escreveVeracidade(&b, []veracidade.Veredito{
+		{Comando: "go test ./...", Estado: veracidade.Sustentado, Confianca: 0.97},
+		{Comando: "go vet ./...", Estado: veracidade.Incerto, Confianca: 0.78},
+	})
+	out := b.String()
+	if strings.Contains(out, "DIVERGE") {
+		t.Errorf("inconclusivo virou acusacao: %q", out)
+	}
+	if !strings.Contains(out, "inconclusivo") {
+		t.Errorf("a linha precisa dizer que ha inconclusivo: %q", out)
+	}
+	if !strings.Contains(out, "go vet") {
+		t.Errorf("o comando inconclusivo precisa ser nomeado: %q", out)
+	}
+}

@@ -1,0 +1,66 @@
+# Roster INFORMADO PELO PILOTO, nao pelo benchmark de terceiro.
+#
+# A pergunta e: "barato primeiro, escalando na falha provada" custa menos
+# cota de fronteira que ir direto ao caro?
+#
+# O piloto de 2026-09-21 mediu, nestas mesmas tres tarefas: swe-2 resolve
+# a facil e a media, e entrega errado na dificil. E a entrega errada que
+# aciona a cascata — falha provada por verificacao de resultado entregue.
+#
+# O teto de percentil do swe-2 e 0.70 porque as tres tarefas mediram entre
+# 0.59 e 0.64 de complexidade. O eixo nao as separa (amplitude 0.12 contra
+# 1.14 do `alcance`), entao nao da para expressar "facil e media, dificil
+# nao" nele. Quem separa aqui e a cascata, que e o ponto.
+versao: 1
+as_of_sondagem: "2026-09-22"
+
+contas:
+  devin-pro-promo:
+    escassez: promocao
+    ate: "2026-09-30"
+  claude-max:
+    escassez: assinatura
+    aperto: medio
+    orquestrador: true
+
+modelos:
+  - id: devin/swe-2
+    papel: barato
+    conta: devin-pro-promo
+    permaslug: null
+    mapeamento: ausente
+    admite_sem_benchmark: 0.65
+    admite_ate_percentil: 0.70
+    sondado:
+      tool_call: true
+      reasoning_content: true
+      tokens_base: 552
+      latencia_s: 3.9
+      em: "2026-09-22"
+    benchmark: null
+    humano:
+      custo_usd_por_mtok: 0.0
+      custo_saida_usd_por_mtok: 0.0
+      habilitado: true
+  - id: cpa-claude-opus-5(high)
+    papel: forte
+    conta: claude-max
+    permaslug: anthropic/opus-5
+    mapeamento: exato
+    sondado:
+      tool_call: true
+      reasoning_content: true
+      tokens_base: 693
+      latencia_s: 2.7
+      em: "2026-09-22"
+    benchmark:
+      coding_index: 78.0
+      intelligence_index: 50.8
+      agentic_index: 56.5
+      tau_bench: 0.792
+      custo_por_tarefa_usd: 0.4930
+      preco_openrouter_usd_por_mtok: {entrada: 5.50, saida: 27.50}
+    humano:
+      custo_usd_por_mtok: 5.0
+      custo_saida_usd_por_mtok: 25.0
+      habilitado: true

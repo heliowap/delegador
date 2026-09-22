@@ -35,7 +35,7 @@ for tf in ${TAREFAS:-facil medio dificil}; do
   P=/tmp/swebench/prep/$CASO
   CMDS="$(sed -n 1p "$P/cmds.txt");$(sed -n 2p "$P/cmds.txt");$(sed -n 3p "$P/cmds.txt")"
 
-  for braco in nu plugin; do
+  for braco in ${BRACOS:-nu plugin}; do
     grep -q "^$braco	$tf	" "$RUN/placar.tsv" && { echo "[pula] $braco/$tf"; continue; }
     WT=/tmp/ablacao/wt/$braco-$tf
     echo "[$(date +%H:%M:%S)] $braco / $tf (issue #$ISS)"
@@ -50,7 +50,13 @@ for tf in ${TAREFAS:-facil medio dificil}; do
       TOUT=$(python3 -c "import json;print(json.load(open('$RUN/$braco-$tf.json'))['tokens_saida'])" 2>/dev/null || echo 0)
       DET=$(python3 -c "import json;print(json.load(open('$RUN/$braco-$tf.json'))['parada'])" 2>/dev/null || echo erro)
     else
-      python3 /tmp/piloto/roster-de.py "$MODELO" 0.0 0.0 > "$RUN/r.yaml"
+      if [ "$braco" = cascata ]; then
+        cp /tmp/ablacao/roster-cascata.yaml "$RUN/r.yaml"
+        ESCALADAS=1
+      else
+        python3 /tmp/piloto/roster-de.py "$MODELO" 0.0 0.0 > "$RUN/r.yaml"
+        ESCALADAS=0
+      fi
       JSON=$("$D" plan --task "$(cat "$P/tarefa.txt")" --evidence "$P/evidencia.jsonl" \
           --worktree "$WT" --testes-prontos --roster "$RUN/r.yaml" \
           --test-cmd "$(sed -n 1p "$P/cmds.txt")" --suite-cmd "$(sed -n 2p "$P/cmds.txt")" \
@@ -61,7 +67,7 @@ for tf in ${TAREFAS:-facil medio dificil}; do
       fi
       JOB=$(echo "$JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin)["job_id"])')
       "$D" run --job "$JOB" --roster "$RUN/r.yaml" --max-turns 40 --turnos-ociosos 25 \
-          --max-escaladas 0 >"$RUN/$braco-$tf.result.txt" 2>"$RUN/$braco-$tf.run.err"
+          --max-escaladas "$ESCALADAS" >"$RUN/$braco-$tf.result.txt" 2>"$RUN/$braco-$tf.run.err"
       TURNS=$(python3 -c "
 import json
 try:
@@ -77,6 +83,9 @@ except OSError: pass
 print(tin,tout)")
       DET=$(grep -oE 'CANCELADO pelo watchdog: [a-z_]+' "$RUN/$braco-$tf.result.txt" 2>/dev/null | sed 's/.*: //')
       [ -z "$DET" ] && DET=final
+      if grep -q '^escalou:' "$RUN/$braco-$tf.result.txt" 2>/dev/null; then
+        DET="$DET+escalou"
+      fi
     fi
     dt=$(( $(date +%s)-t0 ))
     read -r VER TESTE EXTRA < <(julga "$WT" "$CASO" "$SHA")
