@@ -50,20 +50,31 @@ func TestLoadReadsRealRoster(t *testing.T) {
 		t.Errorf("TokensBase = %d, quero 162", glm.Sondado.TokensBase)
 	}
 	// O MESMO modelo noutro canal herda o benchmark pelo permaslug: repetir
-	// o bloco convidaria as copias a divergir.
-	outroCanal, ok := byID["cpa-ocgo-glm-5.3-flash"]
+	// o bloco convidaria as copias a divergir. O par e o deepseek, que tem
+	// entrada na OpenRouter e no OpenCode Go.
+	deepOr, ok := byID["cpa-or-deepseek-v4.1-flash"]
 	if !ok {
-		t.Fatal("o canal do opencode-go sumiu do roster")
+		t.Fatal("deepseek na openrouter ausente")
 	}
-	if outroCanal.Permaslug != glm.Permaslug {
-		t.Fatalf("permaslugs diferentes: %q vs %q", outroCanal.Permaslug, glm.Permaslug)
+	deepOcgo, ok := byID["cpa-ocgo-deepseek-v4.1-flash"]
+	if !ok {
+		t.Fatal("deepseek no opencode-go ausente")
 	}
-	if outroCanal.Benchmark == nil || outroCanal.Benchmark.TauBench != glm.Benchmark.TauBench {
-		t.Errorf("benchmark nao foi herdado pelo permaslug: %+v", outroCanal.Benchmark)
+	if deepOcgo.Permaslug != deepOr.Permaslug {
+		t.Fatalf("permaslugs diferentes: %q vs %q", deepOcgo.Permaslug, deepOr.Permaslug)
 	}
-	if outroCanal.Conta.Ordem() >= glm.Conta.Ordem() {
+	if deepOcgo.Benchmark == nil || deepOr.Benchmark == nil ||
+		deepOcgo.Benchmark.TauBench != deepOr.Benchmark.TauBench {
+		t.Errorf("benchmark nao foi herdado pelo permaslug: %+v", deepOcgo.Benchmark)
+	}
+	if deepOcgo.Conta.Ordem() >= deepOr.Conta.Ordem() {
 		t.Errorf("o canal do plano Go (%d) deveria vir antes do pre-pago (%d)",
-			outroCanal.Conta.Ordem(), glm.Conta.Ordem())
+			deepOcgo.Conta.Ordem(), deepOr.Conta.Ordem())
+	}
+	// O glm saiu do opencode-go por medicao (o canal caiu duas vezes no
+	// piloto). Nao pode voltar sem alguem decidir isso.
+	if _, existe := byID["cpa-ocgo-glm-5.3-flash"]; existe {
+		t.Error("o glm voltou ao opencode-go; ver a nota no roster antes de aceitar")
 	}
 	swe := byID["devin/swe-2"]
 	if swe.Benchmark != nil {

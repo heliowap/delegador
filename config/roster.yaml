@@ -111,6 +111,16 @@ contas:
 modelos:
 
   # ---- mesmos pesos, outros canais -------------------------------------
+  # O glm NAO tem entrada no opencode-go, e a ausencia e deliberada. Ele
+  # esteve la entre 2026-09-21 16h e 21h e saiu por medicao: o canal
+  # devolveu "Upstream request failed" (400) duas vezes no piloto de
+  # capacidade, uma delas esgotando as tres tentativas e matando o run no
+  # turno ZERO. Na mesma sondagem, cpa-fw e cpa-or responderam 12 de 12.
+  #
+  # A preferencia por conta folgada trouxe instabilidade junto, e cota que
+  # nao entrega nao e cota. O glm fica no Fireworks — saldo real, mas canal
+  # que responde. O deepseek segue no opencode-go: ali o canal nao falhou
+  # nenhuma vez em tres execucoes do piloto.
   # Medido no proxy em 2026-09-21: glm-5.3-flash esta em cinco canais e
   # deepseek-v4.1-flash em quatro, todos com tool calling funcionando. O
   # benchmark e do MODELO e e herdado pelo permaslug — repetir o bloco
@@ -118,38 +128,6 @@ modelos:
   #
   # A latencia abaixo e de UMA sondagem, nao de uma media: serve para dizer
   # que o canal responde, nao para ordenar canais entre si.
-  - id: cpa-ocgo-glm-5.3-flash
-    papel: barato
-    conta: opencode-go
-    permaslug: z-ai/glm-5.3-flash-20260826
-    mapeamento: exato
-    sondado:
-      tool_call: true
-      reasoning_content: true
-      tokens_base: 188
-      latencia_s: 15.7
-      em: "2026-09-21"
-    benchmark: null          # herdado do permaslug
-    humano:
-      custo_usd_por_mtok: 0.0    # cota do plano Go, nao cobranca por token
-      custo_saida_usd_por_mtok: 0.0
-      habilitado: true
-    nota: >
-      Mesmo peso do cpa-fw-glm-5.3-flash, na conta que aperta menos. Primeira
-      escolha entre os canais deste modelo enquanto o plano Go tiver folga.
-    # MEDIDO no piloto de 2026-09-21 (docs/evals/2026-09-21-piloto-de-capacidade.md):
-    # 0 de 3 tarefas. Uma nao conta — o canal caiu com 400 de upstream — e
-    # duas sao falha real: na facil parou no meio da exploracao e devolveu
-    # texto em vez de continuar; na dificil, 25 turnos sem escrever nada.
-    #
-    # E o resultado que mais importa, porque este modelo vence 132 de 252
-    # combinacoes da rota. A rota ainda o prefere, e os numeros que ela usa
-    # vem do benchmark de terceiro; enquanto os nossos nao entrarem na
-    # decisao, essa contradicao fica de pe e registrada.
-    #
-    # E o canal: o cpa-ocgo falhou DUAS vezes hoje com "Upstream request
-    # failed", enquanto cpa-fw e cpa-or responderam 12 de 12 na mesma
-    # sondagem. A preferencia por conta folgada trouxe instabilidade junto.
   - id: cpa-ocgo-deepseek-v4.1-flash
     papel: barato
     conta: opencode-go
